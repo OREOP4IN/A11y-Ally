@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>A11y Ally Demo Page - Accessibility Issues Example</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    
+    .section {
+      background: white;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    h2 {
+      color: #333;
+      border-bottom: 2px solid #2196F3;
+      padding-bottom: 10px;
+    }
+    
+    .issue-example {
+      margin: 15px 0;
+      padding: 15px;
+      background: #fff3e0;
+      border-left: 4px solid #ff9800;
+    }
+    
+    .fixed-indicator {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #4caf50;
+      color: white;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    
+    /* Low contrast text */
+    .low-contrast {
+      color: #ccc;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+    
+    table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    
+    .form-example input,
+    .form-example textarea {
+      display: block;
+      margin: 10px 0;
+      padding: 8px;
+      width: 100%;
+      max-width: 300px;
+    }
+    
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>A11y Ally Demo Page</h1>
+  <p>This page contains intentional accessibility issues that A11y Ally will detect and fix.</p>
+  
+  <div class="section">
+    <h2>Issue 1: Missing Alt Text on Images</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 1.1.1 Violation:</strong> Images without alt attributes</p>
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100'%3E%3Crect fill='%234CAF50' width='200' height='100'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='20'%3ESample Image%3C/text%3E%3C/svg%3E" width="200" height="100">
+      <p><em>Extension will add alt text to this image</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 2: Empty Links</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 2.4.4 Violation:</strong> Links without text content</p>
+      <a href="#"></a>
+      <a href="https://example.com"></a>
+      <p><em>Extension will add aria-labels to these empty links</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 3: Empty Buttons</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 4.1.2 Violation:</strong> Buttons without accessible names</p>
+      <button class="close"></button>
+      <button class="menu"></button>
+      <button class="search"></button>
+      <p><em>Extension will add aria-labels based on button class names</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 4: Missing Form Labels</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 3.3.2 Violation:</strong> Form inputs without labels</p>
+      <div class="form-example">
+        <input type="text" name="username" placeholder="Username">
+        <input type="email" name="email" placeholder="Email">
+        <input type="password" name="password" placeholder="Password">
+        <textarea name="comments" placeholder="Comments"></textarea>
+      </div>
+      <p><em>Extension will add aria-labels to these inputs</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 5: Low Contrast Text</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 1.4.3 Violation:</strong> Insufficient color contrast</p>
+      <p class="low-contrast">This text has very poor contrast against the background.</p>
+      <p><em>Extension will detect this issue (auto-fix may be limited)</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 6: Missing Table Headers</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 1.3.1 Violation:</strong> Data table without proper headers</p>
+      <table>
+        <tr>
+          <td>Product</td>
+          <td>Price</td>
+          <td>Quantity</td>
+        </tr>
+        <tr>
+          <td>Widget</td>
+          <td>$10</td>
+          <td>5</td>
+        </tr>
+        <tr>
+          <td>Gadget</td>
+          <td>$20</td>
+          <td>3</td>
+        </tr>
+      </table>
+      <p><em>Extension will detect missing th elements</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Issue 7: Improper Heading Structure</h2>
+    <div class="issue-example">
+      <p><strong>WCAG 1.3.1 Violation:</strong> Skipped heading levels</p>
+      <h4>This is an H4 directly under H2</h4>
+      <p>Heading levels should not be skipped (h2 → h4 skips h3)</p>
+      <p><em>Extension will detect this structural issue</em></p>
+    </div>
+  </div>
+  
+  <div class="section">
+    <h2>Testing Instructions</h2>
+    <ol>
+      <li>Load the A11y Ally extension in your browser</li>
+      <li>Open this page (demo.html)</li>
+      <li>Click the extension icon to view statistics</li>
+      <li>Check the browser console for detected issues</li>
+      <li>Inspect elements to see the fixes applied</li>
+      <li>Look for <code>data-a11y-ally-fixed="true"</code> attributes on fixed elements</li>
+    </ol>
+    
+    <h3>With API Keys Configured</h3>
+    <p>If you've configured Cloud Vision API keys, the extension will:</p>
+    <ul>
+      <li>Generate intelligent alt text for images</li>
+      <li>Analyze image content using AI</li>
+      <li>Create more descriptive labels</li>
+    </ul>
+    
+    <h3>Without API Keys</h3>
+    <p>Without API configuration, the extension will still:</p>
+    <ul>
+      <li>Add basic alt text using filenames or generic descriptions</li>
+      <li>Fix all other accessibility issues</li>
+      <li>Provide useful fallback fixes</li>
+    </ul>
+  </div>
+  
+  <div class="section">
+    <h2>Viewing Results</h2>
+    <p>After the extension processes this page, you can:</p>
+    <ul>
+      <li><strong>Open Browser Console:</strong> See detailed logs of issues found and fixes applied</li>
+      <li><strong>Click Extension Icon:</strong> View statistics in the popup</li>
+      <li><strong>Inspect Elements:</strong> Look for <code>data-a11y-ally-fixed="true"</code> attributes</li>
+      <li><strong>Test Accessibility:</strong> Use screen readers or other tools to verify improvements</li>
+    </ul>
+  </div>
+  
+  <footer style="text-align: center; padding: 20px; color: #666;">
+    <p>A11y Ally Demo Page - Intentional Accessibility Issues for Testing</p>
+  </footer>
+</body>
+</html>

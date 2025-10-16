@@ -5,21 +5,17 @@ Get A11y Ally up and running in 5 minutes!
 ## 1. Install the Extension
 
 ### Chrome/Edge
-```bash
 1. Download/clone this repository
 2. Go to chrome://extensions/
 3. Enable "Developer mode"
 4. Click "Load unpacked"
 5. Select the A11y-Ally folder
-```
 
 ### Firefox
-```bash
 1. Download/clone this repository
 2. Go to about:debugging#/runtime/this-firefox
 3. Click "Load Temporary Add-on"
 4. Select manifest.json
-```
 
 ## 2. Basic Usage (No Setup Required!)
 

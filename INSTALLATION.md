@@ -81,8 +81,9 @@ For AI-powered alt text generation:
 2. **Configure the Extension**
    - Click the A11y Ally icon
    - Scroll to "API Configuration"
-   - Enter your Cloud Vision API Key
-   - (Optional) Enter Vertex AI details
+   - Enter your Cloud Vision API Key (same key works for Vertex AI features)
+   - (Optional) Enter Vertex AI Project ID for advanced features
+   - (Optional) Enter Vertex AI API Key if using a different key
    - Click "Save Settings"
 
 3. **Test the Configuration**

@@ -1,0 +1,16 @@
+{
+  "name": "pa11y-backend",
+  "version": "1.0.0",
+  "description": "Backend to run pa11y for a Chrome extension",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google-cloud/aiplatform": "^5.8.0",
+    "@google-cloud/vision": "^5.3.4",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "pa11y-ci": "^3.0.1"
+  }
+}

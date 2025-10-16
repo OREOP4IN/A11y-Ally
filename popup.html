@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Pa11y Scanner</title>
+  <style>
+    body { width: 350px; font-family: sans-serif; }
+    button { display: block; width: 100%; padding: 10px; margin-top: 10px; }
+    #results { 
+      white-space: pre-wrap; 
+      background-color: #f4f4f4; 
+      padding: 10px; 
+      margin-top: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h1>Accessibility Tools</h1>
+  <button id="manual-fix-button">1. Apply General Fixes</button>
+  <button id="scan-button">2. Scan Fixed Page with Pa11y</button>
+
+  <div id="results">Click a button to start.</div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Pa11y Auto-Fixer",
+  "version": "1.0",
+  "description": "Scans and attempts to fix accessibility issues.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}

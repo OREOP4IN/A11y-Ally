@@ -1,0 +1,26 @@
+{
+  "name": "a11y-ally",
+  "version": "1.0.0",
+  "description": "Web extension that patches WCAG issues based on pa11y and common WCAG mistakes",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"No tests yet\" && exit 0",
+    "lint": "eslint .",
+    "build": "echo \"Build completed\" && exit 0"
+  },
+  "keywords": [
+    "accessibility",
+    "a11y",
+    "wcag",
+    "pa11y",
+    "web-extension"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "pa11y": "^7.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}

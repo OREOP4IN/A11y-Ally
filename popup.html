@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A11y Ally</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>A11y Ally</h1>
+      <p class="subtitle">Accessibility Fixer</p>
+    </header>
+    
+    <div class="status-section">
+      <div class="status-card">
+        <span class="status-label">Status:</span>
+        <span id="extensionStatus" class="status-value">Active</span>
+      </div>
+      
+      <div class="stats">
+        <div class="stat-item">
+          <span class="stat-number" id="issuesCount">-</span>
+          <span class="stat-label">Issues Found</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-number" id="patchesCount">-</span>
+          <span class="stat-label">Patches Applied</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="controls">
+      <button id="analyzeBtn" class="btn btn-primary">
+        <span>Analyze Page</span>
+      </button>
+      
+      <label class="toggle-container">
+        <input type="checkbox" id="autoFixToggle" checked>
+        <span class="toggle-label">Auto-fix issues</span>
+      </label>
+      
+      <label class="toggle-container">
+        <input type="checkbox" id="enabledToggle" checked>
+        <span class="toggle-label">Extension enabled</span>
+      </label>
+    </div>
+    
+    <div class="api-config">
+      <h2>API Configuration</h2>
+      
+      <div class="form-group">
+        <label for="cloudVisionKey">Cloud Vision API Key:</label>
+        <input type="password" id="cloudVisionKey" placeholder="Enter API key">
+      </div>
+      
+      <div class="form-group">
+        <label for="vertexAiKey">Vertex AI API Key:</label>
+        <input type="password" id="vertexAiKey" placeholder="Enter API key">
+      </div>
+      
+      <div class="form-group">
+        <label for="vertexAiProject">Vertex AI Project ID:</label>
+        <input type="text" id="vertexAiProject" placeholder="project-id">
+      </div>
+      
+      <button id="saveSettingsBtn" class="btn btn-secondary">Save Settings</button>
+    </div>
+    
+    <footer>
+      <a href="https://www.w3.org/WAI/WCAG21/quickref/" target="_blank">WCAG Guidelines</a>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 const scanButton = document.getElementById('scan-button');
 const manualFixButton = document.getElementById('manual-fix-button');
 const resultsDiv = document.getElementById('results');
+const altTextButton = document.getElementById('alt-text-button'); // Add this button to popup.html
 
 // Event listener for the Manual Fix button (no changes here)
 manualFixButton.addEventListener('click', async () => {
@@ -52,6 +53,28 @@ scanButton.addEventListener('click', async () => {
         resultsDiv.textContent = `Scan complete! Found ${report.total} issues on the modified page.`;
         console.log("report results: ", report.results); // Log results for inspection
 
+    } catch (error) {
+        resultsDiv.textContent = `An error occurred: ${error.message}`;
+        console.error(error);
+    } finally {
+        scanButton.disabled = false;
+        manualFixButton.disabled = false;
+    }
+});
+
+altTextButton.addEventListener('click', async () => {
+    resultsDiv.textContent = 'Generating alt text for images...';
+    scanButton.disabled = true;
+    manualFixButton.disabled = true;
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log("Sending message to content script for generating alt text.");
+
+        // Ask content script to generate alt text for images without alt attributes
+        chrome.tabs.sendMessage(tab.id, { type: "GENERATE_ALT_TEXT" });
+
+        resultsDiv.textContent = 'Alt text generation completed!';
     } catch (error) {
         resultsDiv.textContent = `An error occurred: ${error.message}`;
         console.error(error);

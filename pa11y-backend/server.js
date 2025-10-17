@@ -1,4 +1,4 @@
-// File: server.js
+require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
@@ -34,13 +34,90 @@ console.log(GCP_PROJECT_ID
     ,VISION_MIN_SCORE
 );
 
-// const { ImageAnnotatorClient } = require('@google-cloud/vision');
-// const visionClient = new ImageAnnotatorClient();
-// const visionClient = new ImageAnnotatorClient({
-//     keyFilename: '../../Cloud Keys/kemahasiswaan-itb-1cc319a505d5.json',  // path to your service account key file
-// });
-// const { aiplatform } = require('@google-cloud/aiplatform');
-// const client = new aiplatform.PredictionServiceClient();
+// removes unnecessary scripts biar pa11y gak timeout2 lagi
+function sanitizeForPa11y(html, opts = {}) {
+    const {
+        removeScripts = true,
+        stripEventHandlers = true,
+        neutralizeIframes = true,
+        dropExternalStyles = false,
+        addCSP = true
+    } = opts;
+
+    let out = html;
+
+    // Remove ALL <script>…</script> and self-closing <script …/>
+    if (removeScripts) {
+        // Remove <script> blocks
+        out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+        // Remove stray self-closing scripts, just in case
+        out = out.replace(/<script\b[^>]*\/\s*>/gi, '');
+        // Remove meta refresh (can cause unwanted navigations)
+        out = out.replace(/<meta\b[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, '');
+    }
+
+    // Strip inline event handlers (onclick, onload, onerror, etc.)
+    if (stripEventHandlers) {
+        out = out.replace(/\son[a-z]+\s*=\s*"(?:\\.|[^"]*)"/gi, '');
+        out = out.replace(/\son[a-z]+\s*=\s*'(?:\\.|[^']*)'/gi, '');
+        out = out.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, ''); // no-quote handlers
+    }
+
+    // Neutralize iframes (keep layout but stop network)
+    if (neutralizeIframes) {
+        out = out.replace(
+        /<iframe\b([^>]*)>([\s\S]*?)<\/iframe>/gi,
+        (_m, attrs, inner) => {
+            // Keep a minimal accessible placeholder with title
+            const titleMatch = /title\s*=\s*(['"])(.*?)\1/i.exec(attrs);
+            const title = titleMatch ? titleMatch[2] : 'Embedded content';
+            return `<div role="group" aria-label="${escapeHtml(title)}" data-pa11y-ifr-placeholder="1"></div>`;
+        }
+        );
+    }
+
+    // Optionally drop external stylesheets (HTTP/HTTPS). Keeps inline styles.
+    if (dropExternalStyles) {
+        out = out.replace(
+        /<link\b[^>]*rel=["']?stylesheet["']?[^>]*>/gi,
+        (tag) => (/href\s*=\s*["']?(https?:)?\/\//i.test(tag) ? '' : tag)
+        );
+    }
+
+    // Inject tight CSP and <base> to keep resolution simple (idempotent)
+    if (addCSP) {
+        // Remove existing CSP meta to avoid conflicts
+        out = out.replace(/<meta\b[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+        const csp =
+        "default-src 'self' data: blob:; " +
+        "img-src * data: blob:; " +
+        "media-src * data: blob:; " +
+        "font-src * data:; " +
+        "style-src 'self' 'unsafe-inline' data:; " +
+        "script-src 'none'; " +
+        "connect-src 'none'; " +
+        "frame-src 'none'";
+        const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+
+        // Ensure there is a <head>
+        if (!/<head\b[^>]*>/i.test(out)) {
+        out = out.replace(/<html\b[^>]*>/i, '$&<head></head>');
+        }
+        // Inject CSP right after <head>
+        out = out.replace(/<head\b[^>]*>/i, match => `${match}\n${cspMeta}`);
+    }
+
+    return out;
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 
 async function generateAltText(imageUrl) {
     console.log("test imageUrl:", imageUrl);
@@ -54,30 +131,38 @@ async function generateAltText(imageUrl) {
 }
 
 async function generateAltTextWithVision(imageUrl) {
-  // Use imageUri so Vision downloads the URL itself
-  const [result] = await visionClient.labelDetection({ image: { source: { imageUri: imageUrl } } });
-  const labels = (result.labelAnnotations || [])
-    .filter(l => (l.score || 0) >= VISION_MIN_SCORE)
-    .slice(0, VISION_MAX_LABELS)
-    .map(l => l.description);
+    // Use imageUri so Vision downloads the URL itself
+    const [result] = await visionClient.labelDetection({ image: { source: { imageUri: imageUrl } } });
+    const labels = (result.labelAnnotations || [])
+        .filter(l => (l.score || 0) >= VISION_MIN_SCORE)
+        .slice(0, VISION_MAX_LABELS)
+        .map(l => l.description);
 
-  // Basic phrasing like your PHP config style
-  const alt = labels.join(', ');
-  return alt || 'Image';
+    const alt = labels.join(', ');
+    return alt || 'Image';
 }
 
-// const modelEndpoint = 'projects/YOUR_PROJECT_ID/locations/YOUR_REGION/publishers/google/models/YOUR_MODEL_NAME/versions/YOUR_VERSION_NAME';
 // Gemini multimodal caption (short, a11y-friendly)
 async function generateAltTextWithGemini(imageUrl) {
     const resp = await fetch(imageUrl);
+    console.log("resp:", resp);
+
     if (!resp.ok) throw new Error(`Fetch image failed: ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
+    console.log("buf:", buf);
 
     // Guess mime (simple)
     let mimeType = 'image/jpeg';
     const u = imageUrl.toLowerCase();
     if (u.endsWith('.png')) mimeType = 'image/png';
     if (u.endsWith('.webp')) mimeType = 'image/webp';
+    console.log("mimeType:", mimeType);
+    console.log('[AUTH]', {
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        project: process.env.GEMINI_PROJECT_ID,
+        location: process.env.GEMINI_LOCATION,
+        model: process.env.GEMINI_MODEL
+    });
 
     const request = {
         contents: [{
@@ -91,37 +176,16 @@ async function generateAltTextWithGemini(imageUrl) {
     };
 
     const result = await generativeModel.generateContent(request);
+    console.log("result:", result);
+    console.log("test");
     const out = await result.response;
+    console.log("result.response:", result.response);
+    console.log("out:", out);
     const text = out.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    console.log("text:", text);
     // Fallback if empty
     return text || 'Image';
-    }
-
-// app.post('/generate-alt-text', async (req, res) => {
-//     const { imageUrl } = req.body;
-//     console.log('Received image URL:', imageUrl);
-
-//     if (!imageUrl) {
-//         return res.status(400).json({ error: 'Image URL is required' });
-//     }
-
-//     try {
-//         let altText;
-
-//         if (config.gemini_mode === 'vertex') {
-//             // altText = await generateAltTextWithGemini(imageUrl);  // Use Gemini (Vertex AI)
-//             altText = await generateAltText(imageUrl);  // Use Vision API
-//         } else {
-//             altText = await generateAltText(imageUrl);  // Use Vision API
-//         }
-
-//         res.json({ altText });
-//         console.log('Alt text generated:', altText);
-//     } catch (error) {
-//         console.error('Error generating alt text:', error);
-//         res.status(500).json({ error: 'Failed to generate alt text' });
-//     }
-// });
+}
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // payload limit to handle large HTML strings
@@ -132,8 +196,9 @@ app.post('/generate-alt-text', async (req, res) => {
 
     try {
         let alt = '';
+        console.log('prefer:', prefer);
         if (prefer === 'vision') {
-        alt = await generateAltTextWithVision(imageUrl);
+            alt = await generateAltTextWithVision(imageUrl);
         } else {
             try {
                 alt = await generateAltTextWithGemini(imageUrl);
@@ -167,7 +232,16 @@ app.post('/run-pa11y', (req, res) => {
     // Write the HTML to a temporary file
     const tempHtmlPath = path.join(__dirname, 'temp_scan.html');
     console.log(`Writing HTML to ${tempHtmlPath}`);
-    fs.writeFileSync(tempHtmlPath, html);
+
+    const sanitized = sanitizeForPa11y(html, {
+        removeScripts: true,
+        stripEventHandlers: true,
+        neutralizeIframes: true,
+        dropExternalStyles: false, // set true if external CSS is slowing things down
+        addCSP: true
+    });
+
+    fs.writeFileSync(tempHtmlPath, sanitized);
 
     // Pa11y config to scan the local temp file
     const pa11yConfig = {
@@ -203,6 +277,8 @@ app.post('/run-pa11y', (req, res) => {
     console.log(fileContent);
     console.log('-------------------------------------------');
     console.log(html);
+    console.log('-------------------------------------------');
+    console.log(sanitized);
     console.log('-------------------------------------------');
 
     exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {

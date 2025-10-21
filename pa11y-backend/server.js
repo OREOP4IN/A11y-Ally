@@ -27,88 +27,192 @@ const visionClient = new vision.ImageAnnotatorClient(); // {keyFilename: '...'} 
 const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
 const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-console.log(GCP_PROJECT_ID
-    ,GCP_LOCATION
-    ,GEMINI_MODEL
-    ,VISION_MAX_LABELS
-    ,VISION_MIN_SCORE
-);
+const crypto = require('crypto');
+
+// ---- Cache paths ----
+const CACHE_DIR = path.join(__dirname, 'cache');
+const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
+const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
+
+if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+
+// Safe load/save helpers
+function loadJson(p) {
+    try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
+    catch { return {}; }
+}
+function saveJsonAtomic(p, obj) {
+    const tmp = p + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    fs.renameSync(tmp, p);
+}
+
+// handles .../icon.svg, .../icon.svg?ver=1#hash, and data URLs
+function isSvgUrl(u) {
+    return /^data:image\/svg\+xml[,;]/i.test(u) || /\.svg(\?|#|$)/i.test(u);
+}
+
+function altFromFilename(url) {
+    try {
+        // fallback for when URLs don’t have a name — return generic
+        if (/^data:/i.test(url)) return 'SVG graphic';
+
+        const u = new URL(url);
+        let name = u.pathname.split('/').pop() || '';
+        try { name = decodeURIComponent(name); } catch {}
+        // strip extension
+        name = name.replace(/\.svg$/i, '');
+        // replace separators with spaces
+        name = name.replace(/[_\-.+]+/g, ' ');
+        // remove leftover non-alphanumerics except spaces
+        name = name.replace(/[^a-zA-Z0-9 ]+/g, ' ');
+        // collapse whitespace & trim
+        name = name.replace(/\s+/g, ' ').trim();
+        // title-case first letter only (keep acronyms)
+        if (name) name = name[0].toUpperCase() + name.slice(1);
+        return name || 'SVG graphic';
+    } catch {
+        return 'SVG graphic';
+    }
+}
+
+// In-memory copy (loaded once, then persisted on change)
+let altCache = loadJson(ALT_CACHE_PATH);     // { [hash]: { altText, imageUrl, ts } }
+let fixesCache = loadJson(FIXES_CACHE_PATH); // { [pageUrl]: { ts, alts: [{src, alt}], meta: {...}} }
+
+function sha1(s) { return crypto.createHash('sha1').update(s).digest('hex'); }
 
 // removes unnecessary scripts biar pa11y gak timeout2 lagi
 function sanitizeForPa11y(html, opts = {}) {
-    const {
-        removeScripts = true,
-        stripEventHandlers = true,
-        neutralizeIframes = true,
-        dropExternalStyles = false,
-        addCSP = true
-    } = opts;
+  const {
+    removeScripts,
+    stripEventHandlers,
+    neutralizeIframes,
+    dropExternalStyles,
+    addCSP,
+    removeComments,       // NEW
+    collapseWhitespace    // NEW
+  } = opts;
+  console.log('rm scripts', removeScripts);
+  console.log('rm seh', stripEventHandlers);
+  console.log('rm ni', neutralizeIframes);
+  console.log('rm ex', dropExternalStyles);
+  console.log('rm csp', addCSP);
+  console.log('rm cmt', removeComments);
+  console.log('rm clp', collapseWhitespace);
 
-    let out = html;
 
-    // Remove ALL <script>…</script> and self-closing <script …/>
-    if (removeScripts) {
-        // Remove <script> blocks
-        out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
-        // Remove stray self-closing scripts, just in case
-        out = out.replace(/<script\b[^>]*\/\s*>/gi, '');
-        // Remove meta refresh (can cause unwanted navigations)
-        out = out.replace(/<meta\b[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, '');
+  let out = html;
+
+  // --- Protect preformatted blocks so we don't collapse their whitespace ---
+  const protectedMap = new Map(); // key -> original HTML
+  let protectId = 0;
+  function protect(tag) {
+    const re = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi');
+    out = out.replace(re, (m) => {
+      const key = `__PA11Y_PROTECT_${tag.toUpperCase()}_${protectId++}__`;
+      protectedMap.set(key, m);
+      return key;
+    });
+  }
+  protect('pre');
+  protect('code');
+  protect('textarea');
+
+  // Remove ALL <script>…</script> and self-closing <script …/>
+  if (removeScripts) {
+    out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+    out = out.replace(/<script\b[^>]*\/\s*>/gi, '');
+    out = out.replace(/<meta\b[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, '');
+  }
+
+  // Strip inline event handlers (onclick, onload, onerror, etc.)
+  if (stripEventHandlers) {
+    out = out.replace(/\son[a-z]+\s*=\s*"(?:\\.|[^"]*)"/gi, '');
+    out = out.replace(/\son[a-z]+\s*=\s*'(?:\\.|[^']*)'/gi, '');
+    out = out.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '');
+  }
+
+  // Neutralize iframes (keep layout but stop network)
+  // NOTES: check lagi keknya ada error soalnya klo di apply gen fix malah nambah 1 error ini:
+                // "code": "WCAG2AA.Principle2.Guideline2_4.2_4_1.H64.1",
+                // "type": "error",
+                // "typeCode": 1,
+                // "message": "Iframe element requires a non-empty title attribute that identifies the frame.",
+                // "context": "<iframe class=\"adsbox ads ad adsbox doubleclick ad-placement carbon-ads\" src=\"https://safeframe.googlesyndication.com/safeframe/1-0-40/html\" style=\"position: absolute; visibility: hidden; z-index: -9999;\">&nbsp;</iframe>",
+                // "selector": "html > body > iframe",
+                // "runner": "htmlcs",
+                // "runnerExtras": {}
+    // NOTES: gajadi udah ilang lagi wtf
+  if (neutralizeIframes) {
+    out = out.replace(
+      /<iframe\b([^>]*)>([\s\S]*?)<\/iframe>/gi,
+      (_m, attrs) => {
+        const titleMatch = /title\s*=\s*(['"])(.*?)\1/i.exec(attrs);
+        const title = titleMatch ? titleMatch[2] : 'Embedded content';
+        return `<div role="group" aria-label="${escapeHtml(title)}" data-pa11y-ifr-placeholder="1"></div>`;
+      }
+    );
+  }
+
+  // Optionally drop external stylesheets (HTTP/HTTPS). Keeps inline styles.
+  if (dropExternalStyles) {
+    out = out.replace(
+      /<link\b[^>]*rel=["']?stylesheet["']?[^>]*>/gi,
+      (tag) => (/href\s*=\s*["']?(https?:)?\/\//i.test(tag) ? '' : tag)
+    );
+  }
+
+  // Remove HTML comments (not IE conditional comments)
+  if (removeComments) {
+    out = out.replace(/<!--(?!\s*\[if).*?-->/gs, '');
+  }
+
+  // Collapse “dead space”
+  if (collapseWhitespace) {
+    out = out.trim();                 // trim doc edges
+    out = out.replace(/\n{3,}/g, '\n\n');      // 3+ blank lines -> 1
+    out = out.replace(/>\s+</g, '><');        // inter-tag whitespace
+    out = out.replace(/(?:&nbsp;|\u00A0){2,}/g, ' '); // many &nbsp; -> 1 space
+    // Collapse long runs of spaces/tabs in text (attributes are unaffected)
+    out = out.replace(/[ \t\f\v]{2,}/g, ' ');
+  }
+
+  // Inject tight CSP (optional)
+  if (addCSP) {
+    out = out.replace(/<meta\b[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+    const csp =
+      "default-src 'self' data: blob:; " +
+      "img-src * data: blob:; " +
+      "media-src * data: blob:; " +
+      "font-src * data:; " +
+      "style-src 'self' 'unsafe-inline' data:; " +
+      "script-src 'none'; " +
+      "connect-src 'none'; " +
+      "frame-src 'none'";
+    const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+    if (!/<head\b[^>]*>/i.test(out)) {
+      out = out.replace(/<html\b[^>]*>/i, '$&<head></head>');
     }
+    out = out.replace(/<head\b[^>]*>/i, match => `${match}\n${cspMeta}`);
+  }
 
-    // Strip inline event handlers (onclick, onload, onerror, etc.)
-    if (stripEventHandlers) {
-        out = out.replace(/\son[a-z]+\s*=\s*"(?:\\.|[^"]*)"/gi, '');
-        out = out.replace(/\son[a-z]+\s*=\s*'(?:\\.|[^']*)'/gi, '');
-        out = out.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, ''); // no-quote handlers
-    }
+  // Restore protected blocks
+  for (const [key, original] of protectedMap.entries()) {
+    out = out.replace(key, original);
+  }
 
-    // Neutralize iframes (keep layout but stop network)
-    if (neutralizeIframes) {
-        out = out.replace(
-        /<iframe\b([^>]*)>([\s\S]*?)<\/iframe>/gi,
-        (_m, attrs, inner) => {
-            // Keep a minimal accessible placeholder with title
-            const titleMatch = /title\s*=\s*(['"])(.*?)\1/i.exec(attrs);
-            const title = titleMatch ? titleMatch[2] : 'Embedded content';
-            return `<div role="group" aria-label="${escapeHtml(title)}" data-pa11y-ifr-placeholder="1"></div>`;
-        }
-        );
-    }
-
-    // Optionally drop external stylesheets (HTTP/HTTPS). Keeps inline styles.
-    if (dropExternalStyles) {
-        out = out.replace(
-        /<link\b[^>]*rel=["']?stylesheet["']?[^>]*>/gi,
-        (tag) => (/href\s*=\s*["']?(https?:)?\/\//i.test(tag) ? '' : tag)
-        );
-    }
-
-    // Inject tight CSP and <base> to keep resolution simple (idempotent)
-    if (addCSP) {
-        // Remove existing CSP meta to avoid conflicts
-        out = out.replace(/<meta\b[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
-        const csp =
-        "default-src 'self' data: blob:; " +
-        "img-src * data: blob:; " +
-        "media-src * data: blob:; " +
-        "font-src * data:; " +
-        "style-src 'self' 'unsafe-inline' data:; " +
-        "script-src 'none'; " +
-        "connect-src 'none'; " +
-        "frame-src 'none'";
-        const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
-
-        // Ensure there is a <head>
-        if (!/<head\b[^>]*>/i.test(out)) {
-        out = out.replace(/<html\b[^>]*>/i, '$&<head></head>');
-        }
-        // Inject CSP right after <head>
-        out = out.replace(/<head\b[^>]*>/i, match => `${match}\n${cspMeta}`);
-    }
-
-    return out;
+  return out;
 }
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 
 function escapeHtml(s) {
     return String(s)
@@ -156,13 +260,13 @@ async function generateAltTextWithGemini(imageUrl) {
     const u = imageUrl.toLowerCase();
     if (u.endsWith('.png')) mimeType = 'image/png';
     if (u.endsWith('.webp')) mimeType = 'image/webp';
-    console.log("mimeType:", mimeType);
-    console.log('[AUTH]', {
-        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-        project: process.env.GEMINI_PROJECT_ID,
-        location: process.env.GEMINI_LOCATION,
-        model: process.env.GEMINI_MODEL
-    });
+    // console.log("mimeType:", mimeType);
+    // console.log('[AUTH]', {
+    //     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+    //     project: process.env.GEMINI_PROJECT_ID,
+    //     location: process.env.GEMINI_LOCATION,
+    //     model: process.env.GEMINI_MODEL
+    // });
 
     const request = {
         contents: [{
@@ -179,10 +283,10 @@ async function generateAltTextWithGemini(imageUrl) {
     console.log("result:", result);
     console.log("test");
     const out = await result.response;
-    console.log("result.response:", result.response);
-    console.log("out:", out);
+    // console.log("result.response:", result.response);
+    // console.log("out:", out);
     const text = out.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    console.log("text:", text);
+    // console.log("text:", text);
     // Fallback if empty
     return text || 'Image';
 }
@@ -190,13 +294,61 @@ async function generateAltTextWithGemini(imageUrl) {
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // payload limit to handle large HTML strings
 
+// POST /alt-lookup  body: { srcs: ["https://...","https://..."] }
+app.post('/alt-lookup', (req, res) => {
+    const { srcs } = req.body || {};
+    if (!Array.isArray(srcs) || !srcs.length) {
+        return res.status(400).json({ error: 'srcs (array) is required' });
+    }
+    const hits = [];
+    const misses = [];
+    for (const src of srcs) {
+        const key = sha1(String(src));
+        const hit = altCache[key];
+        if (hit?.altText) {
+        hits.push({ src, alt: hit.altText });
+        } else {
+        misses.push(src);
+        }
+    }
+    return res.json({ hits, misses });
+});
+
 app.post('/generate-alt-text', async (req, res) => {
+    console.log("masukin", req.body);
     const { imageUrl, prefer = 'gemini' } = req.body || {};
     if (!imageUrl) return res.status(400).json({ error: 'Image URL is required' });
 
     try {
+        // Cache hit first
+        const key = sha1(imageUrl);
+        const hit = altCache?.[key];
+        console.log('check');
+        if (hit?.altText) {
+            console.log("hit", hit);
+            console.log("hit alttext", hit.altText);
+            return res.json({ altText: hit.altText, cached: true });
+        }
+        console.log("issvg", isSvgUrl(imageUrl));
+
+        // SVG fast path (no network/AI)
+        if (isSvgUrl(imageUrl)) {
+            console.log("svg ", imageUrl);
+            let alt = altFromFilename(imageUrl);
+            const MAX_LEN = 120;
+            if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
+
+        // cache it but don’t fail the request if write has issues
+            try {
+                altCache[key] = { imageUrl, altText: alt, ts: Date.now() };
+                saveJsonAtomic(ALT_CACHE_PATH, altCache);
+            } catch (e) { console.warn('ALT cache write failed (SVG):', e); }
+
+            return res.json({ altText: alt, cached: false, source: 'svg-filename' });
+        }
+
+        // Non-SVG: AI path (Gemini → Vision fallback)
         let alt = '';
-        console.log('prefer:', prefer);
         if (prefer === 'vision') {
             alt = await generateAltTextWithVision(imageUrl);
         } else {
@@ -207,17 +359,74 @@ app.post('/generate-alt-text', async (req, res) => {
                 alt = await generateAltTextWithVision(imageUrl);
             }
         }
-        // Trim to your CI3 config style
+
         const MAX_LEN = 120;
         if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
-        res.json({ altText: alt });
+
+        try {
+            altCache[key] = { imageUrl, altText: alt, ts: Date.now() };
+            saveJsonAtomic(ALT_CACHE_PATH, altCache);
+        } catch (e) { console.warn('ALT cache write failed:', e); }
+
+        return res.json({ altText: alt, cached: false, source: 'ai' });
+
     } catch (err) {
         console.error('Error generating alt:', err);
-        res.status(500).json({ error: 'Failed to generate alt text' });
+        if (!res.headersSent) return res.status(500).json({ error: 'Failed to generate alt text' });
     }
 });
 
+// Return previously saved fixes (mainly alts) for a page
+// GET /fixes?url=http://kemahasiswaan.itb/somepage
+app.get('/fixes', (req, res) => {
+    const pageUrl = (req.query.url || '').trim();
+    if (!pageUrl) return res.status(400).json({ error: 'url is required' });
 
+    const entry = fixesCache[pageUrl];
+    res.json(entry || { ts: 0, alts: [], meta: {} });
+});
+
+// Save fixes for a page (idempotent upsert)
+// body: { url, alts: [{src, alt}, ...], meta?: {...} }
+app.post('/save-fixes', (req, res) => {
+    try{
+        console.log("test save fixes");
+        // console.log("test req:", req.body);
+        const { url, alts = [], meta = {} } = req.body || {};
+        // console.log("alts:", alts);
+        if (!url) return res.status(400).json({ error: 'url is required' });
+
+        // Merge into page cache
+        const prev = fixesCache[url] || { alts: [], meta: {}, ts: 0 };
+        const bySrc = new Map(prev.alts.map(a => [a.src, a]));
+        const clean = alts
+            .filter(a => a && a.src && a.alt)
+            .map(a => ({ src: String(a.src), alt: String(a.alt) }));
+        clean.forEach(a => bySrc.set(a.src, a));
+        fixesCache[url] = { ts: Date.now(), alts: Array.from(bySrc.values()), meta: { ...(prev.meta||{}), ...meta } };
+        // console.log("fixesCache[url]:", fixesCache[url]);
+        // NEW: promote into the global alt cache so other pages can reuse
+        let touched = false;
+        for (const a of clean) {
+            const key = sha1(a.src);
+            const cur = altCache[key]?.altText;
+            if (!cur || cur !== a.alt) {
+                altCache[key] = { imageUrl: a.src, altText: a.alt, ts: Date.now() };
+                touched = true;
+            }
+        }
+        // console.log("altCache:", altCache);
+        
+        // Persist both caches atomically-ish
+        try { saveJsonAtomic(FIXES_CACHE_PATH, fixesCache); } catch(e){ console.warn('fixes cache write failed', e); }
+        if (touched) { try { saveJsonAtomic(ALT_CACHE_PATH, altCache); } catch(e){ console.warn('alt cache write failed', e); } }
+        // console.log("res", res);
+        
+        return res.json({ ok: true, count: fixesCache[url].alts.length, ts: fixesCache[url].ts });
+    } catch (e) {
+        if (!res.headersSent) return res.status(500).json({ error: 'save-fixes failed' });
+    }
+});
 
 app.post('/run-pa11y', (req, res) => {
     // expect 'html' in the body, not 'url' so we can get the newest version after running the fixes
@@ -230,15 +439,17 @@ app.post('/run-pa11y', (req, res) => {
     console.log(`Received HTML content for scanning.`);
 
     // Write the HTML to a temporary file
-    const tempHtmlPath = path.join(__dirname, 'temp_scan.html');
+    const tempHtmlPath = path.join(__dirname, 'temp_scan2.html');
     console.log(`Writing HTML to ${tempHtmlPath}`);
 
     const sanitized = sanitizeForPa11y(html, {
         removeScripts: true,
         stripEventHandlers: true,
-        neutralizeIframes: true,
-        dropExternalStyles: false, // set true if external CSS is slowing things down
-        addCSP: true
+        neutralizeIframes: false,
+        dropExternalStyles: false,
+        addCSP: false,
+        removeComments: true,
+        collapseWhitespace: true
     });
 
     fs.writeFileSync(tempHtmlPath, sanitized);
@@ -270,21 +481,24 @@ app.post('/run-pa11y', (req, res) => {
 
     console.log(`Running Pa11y with command: ${command}`);
 
-    const fileContent = fs.readFileSync(configPath, 'utf8');
+    const jsonContent = fs.readFileSync(configPath, 'utf8');
+    const htmlContent = fs.readFileSync(tempHtmlPath, 'utf8');
 
     // Log the content
-    console.log('--- Config File Content (Read from Disk) ---');
-    console.log(fileContent);
-    console.log('-------------------------------------------');
-    console.log(html);
-    console.log('-------------------------------------------');
-    console.log(sanitized);
-    console.log('-------------------------------------------');
+    // console.log('--- Config File Content (Read from Disk) ---');
+    // console.log(jsonContent);
+    // console.log(htmlContent);
+    // console.log('-------------------------------------------');
+    // console.log(html);
+    // console.log('-------------------------------------------');
+    // console.log(sanitized);
+    // console.log('-------------------------------------------');
 
     exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {
-        // Clean up the temp files
+        // NOTES: jangan lupa bwt di-un-comment
         fs.unlinkSync(configPath);
-        fs.unlinkSync(tempHtmlPath);
+        // fs.unlinkSync(tempHtmlPath); 
+        
 
         if (error && error.code !== 2) {
             console.error(`Exec error: ${error}`);

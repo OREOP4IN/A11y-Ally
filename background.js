@@ -89,8 +89,6 @@ function generateCSSForContrastFixes(contrastFailures) {
     return css;
 }
 
-
-
 // Convert Hex to RGB
 function hexToRgb(hex) {
     // Log the received hex value
@@ -121,11 +119,10 @@ function hexToRgb(hex) {
     return { r, g, b };
 }
 
-
 // Calculate relative luminance for contrast ratio
 function relLuminance(rgb) {
-    console.log('relLuminance')
-    console.log('rgb', rgb);
+    // console.log('relLuminance')
+    // console.log('rgb', rgb);
     const toLin = (c) => {
         c = c / 255;
         return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -135,9 +132,9 @@ function relLuminance(rgb) {
 
 // Calculate contrast ratio between two colors
 function contrastRatio(fg, bg) {
-    console.log('contrastRatio')
-    console.log('fg', fg);
-    console.log('bg', bg);
+    // console.log('contrastRatio')
+    // console.log('fg', fg);
+    // console.log('bg', bg);
     const L1 = relLuminance(fg) + 0.05;
     const L2 = relLuminance(bg) + 0.05;
     return (Math.max(L1, L2)) / (Math.min(L1, L2));

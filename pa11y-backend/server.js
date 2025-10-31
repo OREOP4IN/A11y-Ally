@@ -469,7 +469,7 @@ app.post('/run-pa11y', (req, res) => {
                 "--disable-dev-shm-usage",
                 "--disable-software-rasterizer"
             ],
-            "chromeLaunchConfig": { "args": ["--no-sandbox"] }
+            chromeLaunchConfig: { args: ["--no-sandbox"] }
         },
         urls: [`file://${tempHtmlPath}`]
     };
@@ -497,7 +497,7 @@ app.post('/run-pa11y', (req, res) => {
     exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {
         // NOTES: jangan lupa bwt di-un-comment
         fs.unlinkSync(configPath);
-        // fs.unlinkSync(tempHtmlPath); 
+        fs.unlinkSync(tempHtmlPath); 
         
 
         if (error && error.code !== 2) {
@@ -507,6 +507,14 @@ app.post('/run-pa11y', (req, res) => {
 
         try {
             const report = JSON.parse(stdout);
+            const total = report.total;
+            const error = report.error;
+            const passes = report.passes;
+            if (total == 1 && error == null && passes == 0) {
+                const firstIssue = Object.values(report.results)[0][0];
+                console.log('First issue message:', firstIssue.message);
+                parseError = firstIssue.message;
+            }
             console.log('Scan complete. Sending report to extension.');
             res.json(report);
         } catch (parseError) {

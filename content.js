@@ -97,6 +97,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }, (response) => {
       console.log(response.message);
     });
+    chrome.runtime.sendMessage({
+      type: 'GENERATE_A11Y_CSS',
+      report: pa11yReport
+    }, (response) => {
+      console.log(response.message);
+    });
   }
 });
 

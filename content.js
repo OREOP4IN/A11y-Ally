@@ -115,9 +115,9 @@ async function runGeneralFixes() {
     if (alignValue) { el.style.textAlign = alignValue; }
     el.removeAttribute('align');
   });
-    console.log('align')
+  console.log('align');
 
-    // Adds alt and title attributes to anchors
+  // Adds alt and title attributes to anchors
   document.querySelectorAll('a').forEach(anchor => {
     const anchorText = anchor.textContent.trim();
     if (anchorText) {
@@ -125,9 +125,9 @@ async function runGeneralFixes() {
       anchor.setAttribute('title', anchorText);
     }
   });
-    console.log('anchor')
+  console.log('anchor');
 
-    // Fixes duplicate element IDs
+  // Fixes duplicate element IDs
   const ids = {};
   document.querySelectorAll('[id]').forEach(element => {
     let id = element.id;
@@ -137,39 +137,112 @@ async function runGeneralFixes() {
       ids[id] = 1;
     }
   });
-    console.log('duplicate ids')
+  console.log('duplicate ids');
 
-    // Replaces obsolete <center> tags
+  // Replaces obsolete <center> tags
   document.querySelectorAll('center').forEach(center => {
     const div = document.createElement('div');
     div.innerHTML = center.innerHTML;
     div.style.textAlign = 'center';
     center.parentNode.replaceChild(div, center);
   });
-    console.log('center')
+  console.log('center');
 
-    // Improves accessibility for buttons
+  // Improves accessibility for buttons
   document.querySelectorAll('button').forEach(button => {
     let name = button.getAttribute('aria-label') || button.getAttribute('title') || button.textContent.trim() || button.id.trim() || 'Button';
     name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
     button.setAttribute('aria-label', name);
     button.setAttribute('title', name);
   });
-    console.log('button')
+  console.log('button');
 
-    // Improves accessibility for iframes
+  // Improves accessibility for iframes
   document.querySelectorAll('iframe').forEach(iframe => {
     if (!iframe.hasAttribute('title') || iframe.getAttribute('title').trim() === '') {
       iframe.setAttribute('title', 'Embedded Content');
     }
   });
-    console.log('iframe')
+  console.log('iframe');
 
-    // Removes empty headings
+  // Removes empty headings
   document.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(heading => {
     if (!heading.textContent.trim()) { heading.remove(); }
   });
-    console.log('heading')
+  console.log('heading');
+
+  // === dropdown a11y (buttons/panels) ===
+  (function applyDropdownA11yScope() {
+    const MARK = 'data-a11y-dropdown-fixed';
+
+    function idBaseFrom(el, fallback = 'menu') {
+      const txt = (el?.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      return txt || `${fallback}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function ensureId(el, base) {
+      if (el.id && el.id.trim()) return el.id.trim();
+      let id = base;
+      let i = 1;
+      while (document.getElementById(id)) id = `${base}-${i++}`;
+      el.id = id;
+      return id;
+    }
+
+    function fixContainer(container) {
+      if (container.hasAttribute(MARK)) return;
+
+      const button =
+        container.querySelector('.menu-list--btn') ||
+        container.querySelector('button');
+
+      const panel =
+        container.querySelector('.menu-list--dropdown-content') ||
+        container.querySelector('div');
+
+      if (!button || !panel) return;
+      if (!panel.querySelector('a[href]')) return; // must have links
+
+      const base = idBaseFrom(button, 'menu');
+      const btnId = ensureId(button, `${base}Btn`);
+      const panelId = ensureId(panel, `${base}Dropdown`);
+
+      if (!button.hasAttribute('aria-haspopup')) button.setAttribute('aria-haspopup', 'true');
+      if (!button.hasAttribute('aria-expanded')) button.setAttribute('aria-expanded', 'false');
+      if (!button.hasAttribute('aria-controls')) button.setAttribute('aria-controls', panelId);
+
+      if (!panel.hasAttribute('aria-labelledby')) panel.setAttribute('aria-labelledby', btnId);
+      if (!panel.hasAttribute('role')) panel.setAttribute('role', 'menu');
+      panel.querySelectorAll('a[href]').forEach(a => {
+        if (!a.hasAttribute('role')) a.setAttribute('role', 'menuitem');
+        if (!a.hasAttribute('tabindex')) a.setAttribute('tabindex', '0');
+      });
+
+      container.setAttribute(MARK, '1');
+    }
+
+    function applyDropdownA11y(root = document) {
+      // Prefer class-based menus first
+      root.querySelectorAll('.main-nav--menu-list.menu-list--dropdown, .menu-list--dropdown')
+        .forEach(fixContainer);
+
+      // Heuristic fallback: any div with a button and a nested div that has links
+      root.querySelectorAll('div').forEach(div => {
+        if (div.hasAttribute(MARK)) return;
+        const btn = div.querySelector('button');
+        const nestedDivWithLinks = div.querySelector('div a[href]');
+        if (btn && nestedDivWithLinks) fixContainer(div);
+      });
+    }
+
+    applyDropdownA11y();
+  })();
+  console.log('dropdown a11y');
 
   // Generate alts for remaining images without alt
   const applied = await generateAltForImages();   // <-- return [{src, alt}]
@@ -261,7 +334,7 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
 
   console.log('applied', applied);
   return applied; // <-- important
-}
+} 
 
 async function lookupCachedAlts(srcs) {
   try {

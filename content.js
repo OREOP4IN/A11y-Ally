@@ -253,7 +253,7 @@ async function runGeneralFixes() {
         if (div.hasAttribute(MARK)) return;
         const btn = div.querySelector('button');
         const nestedDivWithLinks = div.querySelector('div a[href]');
-        if (btn && nestedDivWithLinks) fixContainer(div);
+        if (btn && nestedDivWithLinks) fixContainer(btn);
       });
     }
 
@@ -267,8 +267,15 @@ async function runGeneralFixes() {
         const pSel = `#${CSS.escape(panelId)}`;
 
         css += `
-        ${bSel}:focus{background-color:#F2F7FC;}
-        ${pSel} a:focus{background-color:#E5EDF5;}
+        ${bSel}:focus{
+                        outline: none; 
+                        border: 2px solid #4A90E2; 
+                        border-radius: 4px;
+                        background-color:#F2F7FC;}
+        ${pSel} a:focus{outline: none; 
+                        border: 2px solid #4A90E2; 
+                        border-radius: 4px;
+                        background-color:#E5EDF5;}
         ${cSel}[aria-expanded="true"] ${pSel}{
           opacity:1;pointer-events:auto;visibility:visible;top:100%;
         }

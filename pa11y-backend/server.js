@@ -429,32 +429,16 @@ app.post('/save-fixes', (req, res) => {
 });
 
 app.post('/run-pa11y', (req, res) => {
-    // expect 'html' in the body, not 'url' so we can get the newest version after running the fixes
-    const { html } = req.body;
+    // Expect 'url' in the body to run Pa11y on the live page
+    const { url } = req.body;
 
-    if (!html) {
-        return res.status(400).json({ error: 'HTML content is required' });
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required' });
     }
 
-    console.log(`Received HTML content for scanning.`);
+    console.log(`Received URL for scanning: ${url}`);
 
-    // Write the HTML to a temporary file
-    const tempHtmlPath = path.join(__dirname, 'temp_scan2.html');
-    console.log(`Writing HTML to ${tempHtmlPath}`);
-
-    const sanitized = sanitizeForPa11y(html, {
-        removeScripts: true,
-        stripEventHandlers: true,
-        neutralizeIframes: false,
-        dropExternalStyles: false,
-        addCSP: false,
-        removeComments: true,
-        collapseWhitespace: true
-    });
-
-    fs.writeFileSync(tempHtmlPath, sanitized);
-
-    // Pa11y config to scan the local temp file
+    // Pa11y config to scan the URL directly
     const pa11yConfig = {
         defaults: {
             timeout: 30000,
@@ -471,7 +455,7 @@ app.post('/run-pa11y', (req, res) => {
             ],
             chromeLaunchConfig: { args: ["--no-sandbox"] }
         },
-        urls: [`file://${tempHtmlPath}`]
+        urls: [url]  // Use the URL directly for testing
     };
 
     const configPath = path.join(__dirname, 'temp_pa11yci.json');
@@ -481,24 +465,9 @@ app.post('/run-pa11y', (req, res) => {
 
     console.log(`Running Pa11y with command: ${command}`);
 
-    const jsonContent = fs.readFileSync(configPath, 'utf8');
-    const htmlContent = fs.readFileSync(tempHtmlPath, 'utf8');
-
-    // Log the content
-    // console.log('--- Config File Content (Read from Disk) ---');
-    // console.log(jsonContent);
-    // console.log(htmlContent);
-    // console.log('-------------------------------------------');
-    // console.log(html);
-    // console.log('-------------------------------------------');
-    // console.log(sanitized);
-    // console.log('-------------------------------------------');
-
     exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {
-        // NOTES: jangan lupa bwt di-un-comment
+        // Clean up the temp config file
         fs.unlinkSync(configPath);
-        fs.unlinkSync(tempHtmlPath); 
-        
 
         if (error && error.code !== 2) {
             console.error(`Exec error: ${error}`);

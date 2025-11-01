@@ -184,16 +184,20 @@ async function runGeneralFixes() {
 
     function fixContainer(container) {
       if (container.hasAttribute(MARK)) return;
+      // console.log('container', container);
 
       const button =
-        // container.querySelector('.menu-list--btn') ||
+        container.querySelector('.menu-list--btn') ||
         container.querySelector('button');
 
       const panel =
         container.querySelector('.menu-list--dropdown-content') ||
         container.querySelector('div');
 
+      // console.log('button n panel', button, panel);
       if (!button || !panel) return;
+      // console.log('panel', panel);
+      // console.log('panelquery', panel.querySelector('a[href]'));
       if (!panel.querySelector('a[href]')) return; // must have links
 
       // ensure IDs on container, button, panel
@@ -201,6 +205,7 @@ async function runGeneralFixes() {
       const containerId = ensureId(container, `${base}Wrap`);
       const btnId = ensureId(button, `${base}Btn`);
       const panelId = ensureId(panel, `${base}Dropdown`);
+      // console.log("btnid", btnId);
 
       // ARIA wiring
       if (!button.hasAttribute('aria-haspopup'))
@@ -245,7 +250,8 @@ async function runGeneralFixes() {
     }
 
     function applyDropdownA11y(root = document) {
-      root.querySelectorAll('.main-nav--menu-list.menu-list--dropdown, .menu-list--dropdown')
+      // console.log(root.querySelectorAll('.menu-list--btn'));
+      root.querySelectorAll('.main-nav--menu-list.menu-list--dropdown, .menu-list--dropdown, .menu-list--btn')
         .forEach(fixContainer);
 
       // Fallback heuristic
@@ -258,6 +264,7 @@ async function runGeneralFixes() {
     }
 
     function injectDynamicDropdownCSS(list) {
+      // console.log('list', list);
       if (!list.length) return;
       let css = '';
 
@@ -283,6 +290,14 @@ async function runGeneralFixes() {
           opacity:1;pointer-events:auto;visibility:visible;top:100%;
         }
         ${cSel}:hover ${bSel}{background:#F2F7FC !important;}
+        btn:focus {
+          border: 2px solid #4A90E2; 
+          border-radius: 4px;
+        }
+        div:focus {
+          border: 2px solid #4A90E2; 
+          border-radius: 4px;
+        }
         `;
       });
 
@@ -298,6 +313,57 @@ async function runGeneralFixes() {
     applyDropdownA11y();
     injectDynamicDropdownCSS(fixedDropdowns);
   })();
+
+  // === Inject CSS to ensure all focusable elements show border when navigated via keyboard ===
+  (function enforceKeyboardNavBorders() {
+    const keyboardNavBorderCSS = `
+      /* Default keyboard navigation border */
+      :focus-visible {
+        outline: none !important;
+      }
+
+      /* Apply fallback border only to elements without existing borders */
+      button:focus-visible:not([data-has-border]),
+      a:focus-visible:not([data-has-border]),
+      input:focus-visible:not([data-has-border]),
+      select:focus-visible:not([data-has-border]),
+      textarea:focus-visible:not([data-has-border]),
+      [tabindex]:focus-visible:not([data-has-border]) {
+        outline: none !important;
+        border: 2px solid #4A90E2 !important; /* bright blue fallback */
+        border-radius: 4px;
+        box-shadow: 0 0 0 2px rgba(74,144,226,0.25); /* soft glow */
+        transition: border-color 0.1s ease, box-shadow 0.1s ease;
+      }
+    `;
+
+    let style = document.getElementById('a11y-fallback-border-style');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = 'a11y-fallback-border-style';
+      document.head.appendChild(style);
+    }
+    style.textContent = keyboardNavBorderCSS;
+
+    // NOTES: JS safeguard mark elements that already have borders so CSS doesn't override
+    /* //NOTES: malah ganggu img jadi gede beut kgk bisa di-overflowin
+    const focusableSelectors = [
+      'button', 'a[href]', 'input', 'select', 'textarea', '[tabindex]'
+    ];
+    const focusables = document.querySelectorAll(focusableSelectors.join(','));
+
+    focusables.forEach(el => {
+      const cs = window.getComputedStyle(el);
+      const borderWidth = parseFloat(cs.borderWidth || 0);
+      const outlineWidth = parseFloat(cs.outlineWidth || 0);
+      if (borderWidth > 0 || outlineWidth > 0) {
+        el.setAttribute('data-has-border', 'true');
+      }
+    }); */
+
+  console.log('✅ Fallback keyboard navigation borders injected.');
+  })();
+
 
   // === alt-text generation ===
   const applied = await generateAltForImages(); // returns [{src, alt}]

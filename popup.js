@@ -39,36 +39,43 @@ manualFixButton.addEventListener('click', async () => {
 
 // MODIFIED: Event listener for the Pa11y Scan button
 scanButton.addEventListener('click', async () => {
-    resultsDiv.textContent = 'Getting modified HTML from page...';
+    resultsDiv.textContent = 'Preparing URL for Pa11y…';
     scanButton.disabled = true;
     manualFixButton.disabled = true;
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !tab.url) throw new Error('Active tab URL not available.');
 
-        // 1. Ask content script for the current page's HTML
-        const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_HTML" });
-        
-        if (!response || !response.html) {
-            throw new Error("Could not get HTML from content script.");
+        // Disallow internal pages Pa11y/Chromium can’t fetch
+        const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
+        if (disallowed.test(tab.url)) {
+            throw new Error('This page type cannot be scanned. Open a normal http(s) page.');
         }
-        resultsDiv.textContent = 'HTML received. Sending to Pa11y backend for scanning...';
-        
-        // 2. Send the raw HTML to the backend
+
+        // uncomment to keep the old HTML flow behind a flag:
+        // const useHtml = false;
+        // if (useHtml) { /* cari di repo lama */ }
+
+        resultsDiv.textContent = `Sending URL to Pa11y: ${tab.url}`;
+
         const scanResponse = await fetch('http://localhost:3000/run-pa11y', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: response.html }), // Send HTML, not URL
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: tab.url }) // ✅ URL, not HTML
         });
-        console.log("scanResponse: ", scanResponse);
-        
+
         if (!scanResponse.ok) {
-            throw new Error(`Server responded with status: ${scanResponse.status}`);
+        const t = await scanResponse.text().catch(() => '');
+        throw new Error(`Server ${scanResponse.status}. ${t || ''}`.trim());
         }
-        
+
         const report = await scanResponse.json();
-        resultsDiv.textContent = `Scan complete! Found ${Object.values(report.results)[0].length} issues on the modified page.`;
-        console.log("report: ", report); // Log results for inspection
+        // `report.results` is an object keyed by URL → array of issues
+        const firstKey = Object.keys(report.results || {})[0];
+        const issues = firstKey ? report.results[firstKey] : [];
+        resultsDiv.textContent = `Scan complete! Found ${issues?.length || 0} issues on ${firstKey || tab.url}.`;
+        console.log('Pa11y report:', report);
     } catch (error) {
         resultsDiv.textContent = `An error occurred: ${error.message}`;
         console.error(error);

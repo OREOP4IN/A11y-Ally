@@ -163,28 +163,29 @@ function nudgeToward(fg, bg, toWhite, target) {
     return null; // Return null if no satisfactory color was found
 }
 
-// Pick the best color based on background and foreground (contrast ratio)
+// Pick the best color from pa11y-report
 function pickColor(bgHex, fgHex = null) {
     const bg = hexToRgb(bgHex);
     let fg = fgHex ? hexToRgb(fgHex) : null;
     console.log('bg', bg);
     console.log('fg', fg)
+    const black = { r: 0, g: 0, b: 0 };
+    const white = { r: 255, g: 255, b: 255 };
+    const gray = { r: 122, g: 122, b: 122 };
 
     if (!fg) {
         // Default to black or white based on background luminance
-        const black = { r: 0, g: 0, b: 0 };
-        const white = { r: 255, g: 255, b: 255 };
         const crB = contrastRatio(black, bg);
         const crW = contrastRatio(white, bg);
         return crB >= crW ? '#000000' : '#ffffff';
     }
 
     // If the foreground already passes the contrast ratio, return it
-    if (contrastRatio(fg, bg) >= 4.5) {
+    if (contrastRatio(fg, white) >= 4.5 || contrastRatio(fg, black) >= 4.5){
         return rgbToHex(fg);
     }
 
-    // Try nudging toward white or black
+    // Try nudging toward white or black if the contrast ratio dont work
     const towardWhite = nudgeToward(fg, bg, true, 4.5);
     const towardBlack = nudgeToward(fg, bg, false, 4.5);
     console.log('towardWhite', towardWhite);

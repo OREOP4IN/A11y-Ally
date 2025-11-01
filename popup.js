@@ -116,33 +116,39 @@ a11yCssButton.addEventListener('click', async () => {
     try {
         console.log('pak eko');
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_HTML" });
-        
-        if (!response || !response.html) {
-            throw new Error("Could not get HTML from content script.");
+
+        // Disallow internal pages Pa11y/Chromium can’t fetch
+        const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
+        if (disallowed.test(tab.url)) {
+            throw new Error('This page type cannot be scanned. Open a normal http(s) page.');
         }
-        resultsDiv.textContent = 'HTML received. Sending to Pa11y backend for scanning...';
-        
+
+        // uncomment to keep the old HTML flow behind a flag:
+        // const useHtml = false;
+        // if (useHtml) { /* cari di repo lama */ }
+
+        resultsDiv.textContent = `Sending URL to Pa11y: ${tab.url}`;
+
         const scanResponse = await fetch('http://localhost:3000/run-pa11y', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: response.html }), // Send HTML, not URL
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: tab.url }) // ✅ URL, not HTML
         });
-        console.log("scanResponse: ", scanResponse);
-        
+
         if (!scanResponse.ok) {
-            throw new Error(`Server responded with status: ${scanResponse.status}`);
+        const t = await scanResponse.text().catch(() => '');
+        throw new Error(`Server ${scanResponse.status}. ${t || ''}`.trim());
         }
-        
+
         console.log('alhamdullilah');
-        const pa11yReport = await scanResponse.json();
-        console.log('bisa coy', pa11yReport);
+        const report = await scanResponse.json();
+        console.log('bisa coy', report);
         
         // Send the Pa11y report to the content script for generating A11Y CSS
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             chrome.tabs.sendMessage(tabs[0].id, {
                 type: 'GENERATE_A11Y_CSS',
-                report: pa11yReport
+                report: report
             });
         });
 

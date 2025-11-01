@@ -34,7 +34,7 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/": {
-    "ts": 1761712817774,
+    "ts": 1761991845883,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -149,7 +149,7 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/kabinet-km-itb-jatinangor-gelar-level-up-core-untuk-asah-kemampuan-personal-branding-mahasiswa": {
-    "ts": 1761211829724,
+    "ts": 1761993840318,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -161,7 +161,7 @@
       }
     ],
     "meta": {
-      "source": "manual",
+      "source": "auto",
       "count": 5
     }
   },
@@ -335,6 +335,56 @@
     "meta": {
       "source": "auto",
       "count": 17
+    }
+  },
+  "https://kemahasiswaan.itb.ac.id/organization-structure": {
+    "ts": 1761991132212,
+    "alts": [
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
+        "alt": "Chevron down"
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 4
+    }
+  },
+  "https://kemahasiswaan.itb.ac.id/contact": {
+    "ts": 1761991279238,
+    "alts": [
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
+        "alt": "Chevron down"
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-youtube-30.png",
+        "alt": "A pixelated red play button icon."
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-instagram-30.png",
+        "alt": "A pixelated square icon with a gradient of purple, pink, orange, and yellow, containing a white outline of a camera."
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-x-30.png",
+        "alt": "A stylized letter X in white on a dark gray square background with rounded corners."
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-facebook-30.png",
+        "alt": "A blue circle with a white lowercase 'f' in the center."
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-line-30.png",
+        "alt": "A green square with a white speech bubble containing the word \"LINE\" in white text."
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-whatsapp-30.png",
+        "alt": "Speech bubble icon."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 10
     }
   }
 }

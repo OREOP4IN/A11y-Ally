@@ -283,5 +283,35 @@
     "imageUrl": "https://www.ui.ac.id/wp-content/uploads/2022/12/ico_whyui2b.png",
     "altText": "Image",
     "ts": 1761712556288
+  },
+  "1d11313bad5a63d62eee1af3bdd3ece92ecc49b0": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-youtube-30.png",
+    "altText": "A pixelated red play button icon.",
+    "ts": 1761991278011
+  },
+  "4720211f0866a9291f10ffb29c947870721f28d9": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-instagram-30.png",
+    "altText": "A pixelated square icon with a gradient of purple, pink, orange, and yellow, containing a white outline of a camera.",
+    "ts": 1761991278169
+  },
+  "36aef7985d4fa680ca57561e4ee1683d0bb568bb": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-x-30.png",
+    "altText": "A stylized letter X in white on a dark gray square background with rounded corners.",
+    "ts": 1761991278218
+  },
+  "379556259953d311d688f1192cb7e2a32b4fa3b0": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-facebook-30.png",
+    "altText": "A blue circle with a white lowercase 'f' in the center.",
+    "ts": 1761991278256
+  },
+  "ccab92eb2ed0bc4324dce15792e0b6e81aa78583": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-line-30.png",
+    "altText": "A green square with a white speech bubble containing the word \"LINE\" in white text.",
+    "ts": 1761991278287
+  },
+  "d769b81f4fbd55fec3ea8cd8dbec1d96937f10d8": {
+    "imageUrl": "https://kemahasiswaan.itb.ac.id/icons/icons8-whatsapp-30.png",
+    "altText": "Speech bubble icon.",
+    "ts": 1761991279206
   }
 }

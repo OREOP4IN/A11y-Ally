@@ -283,10 +283,10 @@ async function generateAltTextWithGemini(imageUrl) {
     console.log("result:", result);
     console.log("test");
     const out = await result.response;
-    // console.log("result.response:", result.response);
-    // console.log("out:", out);
+    console.log("result.response:", result.response);
+    console.log("out:", out);
     const text = out.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    // console.log("text:", text);
+    console.log("text:", text);
     // Fallback if empty
     return text || 'Image';
 }
@@ -317,13 +317,15 @@ app.post('/alt-lookup', (req, res) => {
 app.post('/generate-alt-text', async (req, res) => {
     console.log("masukin", req.body);
     const { imageUrl, prefer = 'gemini' } = req.body || {};
+    console.log("imageUrl", imageUrl);
     if (!imageUrl) return res.status(400).json({ error: 'Image URL is required' });
+    console.log("prefer", prefer);
 
     try {
         // Cache hit first
         const key = sha1(imageUrl);
         const hit = altCache?.[key];
-        console.log('check');
+        console.log('check masok gen alt');
         if (hit?.altText) {
             console.log("hit", hit);
             console.log("hit alttext", hit.altText);
@@ -353,6 +355,7 @@ app.post('/generate-alt-text', async (req, res) => {
             alt = await generateAltTextWithVision(imageUrl);
         } else {
             try {
+                console.log('masuk gemini');
                 alt = await generateAltTextWithGemini(imageUrl);
             } catch (e) {
                 console.warn('Gemini failed, falling back to Vision:', e.message);

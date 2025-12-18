@@ -19,43 +19,159 @@ function withTimeout(promise, ms, err='timeout'){
   return promise.finally(()=>clearTimeout(t)), {signal: ctrl.signal};
 }
 
+function promisify(type, data = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type, ...data },
+      (resp) => {
+        if (chrome.runtime.lastError) {
+          return reject(new Error(chrome.runtime.lastError.message));
+        }
+        if (!resp || !resp.ok) {
+          return reject(new Error(resp?.error || `${type} failed`));
+        }
+        resolve(resp);
+      }
+    );
+  });
+}
 
+async function runPromisify(title, payload = {}) {
+  try {
+    console.log(`we runnin ${title}`);
+    const result = await promisify(title, payload);
+    console.log(`${title} result:`, result);
+    return { data: result.data, ok: result.ok };
+  } catch (err) {
+    console.error(`${title} error:`, err);
+    throw err;
+  }
+}
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  runManualFixes();
+} else {
+  window.addEventListener('DOMContentLoaded', runManualFixes);
+}
+
+function runManualFixes() {
+  console.log('masuk async run (content.js)');
+  (async () => {
+    try {
+      const applied = await runGeneralFixes();
+      if (applied?.length) {
+        try {
+          await savePageFixes(applied, { source: 'auto', count: applied.length });
+        } catch (e) {
+          console.warn('savePageFixes failed (post-reply):', e);
+        }
+      }
+
+    console.log('pak eko');
+    const url = window.location.href;
+    const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
+
+    if (disallowed.test(url)) {
+      console.error('This page type cannot be scanned. Open a normal http(s) page.');
+    } else {
+      console.log('Scanning URL:', url);
+    }
+
+    // uncomment to keep the old HTML flow behind a flag:
+    // const useHtml = false;
+    // if (useHtml) { /* cari di repo lama */ }
+
+    const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
+    // (async () => {
+    //   chrome.runtime.sendMessage(
+    //     { type: 'RUN_PA11Y', url: url },
+    //     (resp) => {
+    //       if (!resp || !resp.ok) {
+    //         console.error('RUN_PA11Y failed:', resp?.error);
+    //         return;
+    //       }
+    //       console.log('RUN_PA11Y result:', resp.data);
+    //       const pa11yResult = resp.data;
+
+    //     }
+    //   );
+    // })();
+    
+    // const scanResponse = await fetch('http://localhost:3000/run-pa11y', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify({ url: url }) // ✅ URL, not HTML
+    // });
+
+    const pa11yReport = pa11yResult.data;
+    console.log('pa11yResult:', pa11yReport);
+    console.log('pa11yResult:', pa11yReport);
+    console.log('pa11yResult:', JSON.stringify(pa11yResult.data));
+    if (!pa11yResult.ok) {
+      const t = JSON.stringify(pa11yReport);
+      throw new Error(`Server ${pa11yResult.status}. ${t || ''}`.trim());
+    }
+
+    console.log('alhamdullilah');
+    
+    // Send the Pa11y report to the content script for generating A11Y CSS
+    // chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    //   chrome.tabs.sendMessage(tabs[0].id, {
+    //     type: 'GENERATE_A11Y_CSS',
+    //     report: report
+    //   });
+    // });
+
+    console.log('report konten sayang:', pa11yReport);
+    chrome.runtime.sendMessage({
+      type: 'GENERATE_A11Y_CSS',
+      report: pa11yReport
+    }, (response) => {
+      console.log(response.message);
+    });
+
+    } catch (e) {
+      console.error('runGeneralFixes failed:', e);
+    }
+  })();
+
+  return true;
+}
 // Listen for messages from the popup
 // NOTES: keknya kudu di-optimasi; beda2 metode soalnya
 // content.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === "RUN_MANUAL_FIXES") {
-    // ASYNC branch: we will call sendResponse later -> return true
-    (async () => {
-      try {
-        // Run all fixes and alt generation; collect what was applied
-        const applied = await runGeneralFixes(); // should return [{src, alt}, ...]
+  // if (request.type === "RUN_MANUAL_FIXES") {
+  //   // ASYNC branch: we will call sendResponse later -> return true
+  //   (async () => {
+  //     try {
+  //       // Run all fixes and alt generation; collect what was applied
+  //       const applied = await runGeneralFixes(); // should return [{src, alt}, ...]
 
-        // Reply ASAP so popup doesn’t time out
-        sendResponse({ ok: true, appliedCount: applied?.length || 0 });
+  //       // Reply ASAP so popup doesn’t time out
+  //       sendResponse({ ok: true, appliedCount: applied?.length || 0 });
 
-        // Persist AFTER replying (fire-and-forget)
-        if (applied?.length) {
-          try {
-            await savePageFixes(applied, { source: 'auto', count: applied.length });
-          } catch (e) {
-            console.warn('savePageFixes failed (post-reply):', e);
-          }
-        }
-      } catch (e) {
-        console.error('runGeneralFixes failed:', e);
-        // Reply exactly once on error
-        try { sendResponse({ ok: false, error: String(e?.message || e) }); } catch {}
-      }
-    })();
-    return true; // keep port open for async sendResponse
-  }
+  //       // Persist AFTER replying (fire-and-forget)
+  //       if (applied?.length) {
+  //         try {
+  //           await savePageFixes(applied, { source: 'auto', count: applied.length });
+  //         } catch (e) {
+  //           console.warn('savePageFixes failed (post-reply):', e);
+  //         }
+  //       }
+  //     } catch (e) {
+  //       console.error('runGeneralFixes failed:', e);
+  //       // Reply exactly once on error
+  //       try { sendResponse({ ok: false, error: String(e?.message || e) }); } catch {}
+  //     }
+  //   })();
+  //   return true; // keep port open for async sendResponse
+  // }
 
   if (request.type === "GET_HTML") {
     // SYNC branch: respond immediately, do NOT return true
     try {
       const currentHtml = document.documentElement.outerHTML;
-      // Tip: logging the whole HTML can freeze DevTools; remove the big console.log
       sendResponse({ ok: true, html: currentHtml });
     } catch (e) {
       sendResponse({ ok: false, error: String(e?.message || e) });
@@ -64,12 +180,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "GENERATE_ALT_TEXT") {
-    // ASYNC branch: generate then respond
     (async () => {
       try {
         const applied = await generateAltForImages(); // return [{src, alt}, ...]
         sendResponse({ ok: true, appliedCount: applied?.length || 0 });
-        // Persist after reply (optional)
         if (applied?.length) {
           try { await savePageFixes(applied, { source: 'manual', count: applied.length }); }
           catch (e) { console.warn('savePageFixes failed (post-reply):', e); }
@@ -79,17 +193,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ ok: false, error: String(e?.message || e) });
       }
     })();
-    return true; // keep port open for async sendResponse
+    return true;
   }
 
-  // Unknown message: answer synchronously
   sendResponse({ ok: false, error: 'Unknown request.type' });
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'GENERATE_A11Y_CSS') {
     console.log('masok content script')
-    const pa11yReport = request.report;  // Get Pa11y report from the background or popup
+    const pa11yReport = request.report;
     console.log('report konten sayang:', pa11yReport);
     chrome.runtime.sendMessage({
       type: 'GENERATE_A11Y_CSS',
@@ -97,14 +210,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }, (response) => {
       console.log(response.message);
     });
-    chrome.runtime.sendMessage({
-      type: 'GENERATE_A11Y_CSS',
-      report: pa11yReport
-    }, (response) => {
-      console.log(response.message);
-    });
+    // chrome.runtime.sendMessage({  // Ran twice incase ada yg kelewatan idk tho
+    //   type: 'GENERATE_A11Y_CSS',
+    //   report: pa11yReport
+    // }, (response) => {
+    //   console.log(response.message);
+    // });
   }
 });
+
+
 
 async function runGeneralFixes() {
   // === general fixes ===
@@ -376,29 +491,25 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
   // collect targets (no existing alt)
   const imgs = [...document.querySelectorAll('img')].filter(img => !img.getAttribute('alt')?.trim());
   if (!imgs.length) return [];
+  console.log('imgs', imgs);
+
 
   // de-duplicate srcs to avoid repeated calls
   const uniqueSrcs = [...new Set(imgs.map(i => i.src).filter(Boolean))];
 
   // 1) Try global cache first (cross-page reuse)
   let hits = [], misses = uniqueSrcs;
-  try {
-    const resp = await fetch('http://localhost:3000/alt-lookup', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ srcs: uniqueSrcs })
-    });
-    if (resp.ok) {
-      const data = await resp.json(); // {hits:[{src,alt}], misses:[...]}
-      hits = data.hits || [];
-      misses = data.misses || uniqueSrcs;
-    }
-  } catch (e) {
-    console.warn('alt-lookup failed; will generate for all:', e);
-  }
-
+  const alt_lookup = await runPromisify('ALT_LOOKUP', {srcs: uniqueSrcs});
+  console.log(alt_lookup.data); 
+  console.log(alt_lookup.data.hits); 
+  hits = alt_lookup.data.hits || [];
+  misses = alt_lookup.data.misses || uniqueSrcs;
+  
+  console.log('hits', hits);
+  console.log('misses', misses);
   const hitMap = new Map(hits.map(h => [h.src, h.alt]));
   const applied = [];
+  
 
   // Apply cache hits immediately
   for (const img of imgs) {
@@ -429,26 +540,65 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
     while (idx < nonSvgImgs.length) {
       const img = nonSvgImgs[idx++];
       const src = img.src;
-      try {
-        const ctrl = new AbortController();
-        const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
-        const r = await fetch('http://localhost:3000/generate-alt-text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: src, prefer }),
-          signal: ctrl.signal
-        });
-        clearTimeout(to);
-        if (!r.ok) throw new Error('HTTP '+r.status);
-        const j = await r.json();
-        if (j && j.altText) {
-          img.setAttribute('alt', j.altText);
-          applied.push({ src, alt: j.altText });
-        }
-      } catch (e) {
-        console.warn('ALT gen failed', src, e);
-      }
+
+      console.log('genalt src', src);
+      console.log('img', img);
+      console.log('unique', uniqueSrcs);
+
+      (async () => {
+        chrome.runtime.sendMessage(
+          { type: 'GEN_ALT', src: src, requestTimeoutMs: requestTimeoutMs, prefer: prefer, img: img},
+          (resp) => {
+            if (!resp || !resp.ok) {
+              console.error('GEN_ALT failed:', resp?.error);
+              return;
+            }
+            console.log('GEN_ALT result:', resp.data);
+            const data = resp.data;
+            if (data && data.altText) {
+                img.setAttribute('alt', data.altText);
+                applied.push({ src, alt: data.altText });
+            }
+          }
+        );
+      })();
     }
+
+      // try {
+      //   const resp = await fetch('http://localhost:3000/alt-lookup', {
+      //     method: 'POST',
+      //     headers: {'Content-Type':'application/json'},
+      //     body: JSON.stringify({ srcs: uniqueSrcs })
+      //   });
+      //   if (resp.ok) {
+      //     const data = await resp.json(); // {hits:[{src,alt}], misses:[...]}
+      //     hits = data.hits || [];
+      //     misses = data.misses || uniqueSrcs;
+      //   }
+      // } catch (e) {
+      //   console.warn('alt-lookup failed; will generate for all:', e);
+      // }
+  
+
+      // try {
+      //   const ctrl = new AbortController();
+      //   const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
+      //   const r = await fetch('http://localhost:3000/generate-alt-text', {
+      //     method: 'POST',
+      //     headers: { 'Content-Type': 'application/json' },
+      //     body: JSON.stringify({ imageUrl: src, prefer }),
+      //     signal: ctrl.signal
+      //   });
+      //   clearTimeout(to);
+      //   if (!r.ok) throw new Error('HTTP '+r.status);
+      //   const j = await r.json();
+      //   if (j && j.altText) {
+      //     img.setAttribute('alt', j.altText);
+      //     applied.push({ src, alt: j.altText });
+      //   }
+      // } catch (e) {
+      //   console.warn('ALT gen failed', src, e);
+      // }
   }
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, nonSvgImgs.length)) }, worker));
 
@@ -491,13 +641,30 @@ async function fetchPageFixes() {
 
 async function savePageFixes(alts, meta = {}) {
   console.log("savePageFixes");
-    try {
-        await fetch('http://localhost:3000/save-fixes', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ url: location.href, alts, meta })
-        });
-    } catch (e) {
-        console.warn('savePageFixes failed:', e);
-    }
+  console.log('locationhref', location.href);
+  const locationhref = location.href;
+
+  (async () => {
+    chrome.runtime.sendMessage(
+      { type: 'SAVE_FIXES', alts: alts, meta: meta, location: locationhref},
+      (resp) => {
+        if (!resp || !resp.ok) {
+          console.error('SAVE_FIXES failed:', resp?.error);
+          return;
+        }
+        console.log('SAVE_FIXES result:', resp.data);
+        // use resp.data here
+      }
+    );
+  })();
+
+    // try {
+    //     await fetch('http://localhost:3000/save-fixes', {
+    //     method: 'POST',
+    //     headers: {'Content-Type': 'application/json'},
+    //     body: JSON.stringify({ url: location.href, alts, meta })
+    //     });
+    // } catch (e) {
+    //     console.warn('savePageFixes failed:', e);
+    // }
 }

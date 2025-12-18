@@ -27,6 +27,126 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+// chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+//   if (request.type === 'GENERATE_A11Y_CSS') {
+//     console.log('masok content script')
+//     const pa11yReport = request.report;  // Get Pa11y report from the background or popup
+//     console.log('report konten sayang:', pa11yReport);
+//     chrome.runtime.sendMessage({
+//       type: 'GENERATE_A11Y_CSS',
+//       report: pa11yReport
+//     }, (response) => {
+//       console.log(response.message);
+//     });
+//   }
+// });
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'ALT_LOOKUP') {
+        (async () => {
+        try {
+            const resp = await fetch('http://localhost:3000/alt-lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ srcs: msg.srcs })
+            });
+
+            if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+            }
+
+            const data = await resp.json();
+            sendResponse({ ok: true, data });
+        } catch (err) {
+            console.error('ALT_LOOKUP error:', err);
+            sendResponse({ ok: false, error: err.message });
+        }
+        })();
+
+        return true;
+    }
+    if (msg.type === 'GEN_ALT') {
+        const src = msg.src;
+        (async () => {
+            try {
+                const requestTimeoutMs = msg.requestTimeoutMs || 15000;
+                const prefer = msg.prefer;
+                const img = msg.img;
+                
+                console.log('masok gak?');
+                const ctrl = new AbortController();
+                console.log('ctrl', ctrl);
+                const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
+                console.log('to', to);
+                const resp = await fetch('http://localhost:3000/generate-alt-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageUrl: src, prefer }),
+                    signal: ctrl.signal
+                });
+                // console.log("r", r);
+                // console.log("r.json():", r.json());
+                clearTimeout(to);
+                if (!resp.ok) throw new Error('HTTP '+resp.status);
+                // const j = await r.json();
+                const data = await resp.json();
+
+                console.log('GEN_ALT result:', data);
+                sendResponse({ ok: true, data });
+                
+                // if (j && j.altText) {
+                //     img.setAttribute('alt', j.altText);
+                //     applied.push({ src, alt: j.altText });
+                // }
+            } catch (err) {
+                console.warn('ALT gen failed', src, err);
+            }
+        })();
+
+        return true;
+    }
+    if (msg.type === 'SAVE_FIXES') {
+        (async () => {
+        try {
+            const alts = msg.alts;
+            const meta = msg.meta;
+            const location = msg.location;
+            console.log('locationhref111111', location);
+            await fetch('http://localhost:3000/save-fixes', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url: location, alts, meta })
+            });
+        } catch (err) {
+            console.warn('savePageFixes failed:', err);
+        }
+        })();
+
+        return true;
+    }
+    if (msg.type === 'RUN_PA11Y') {
+        (async () => {
+            try {
+                const url = msg.url;
+                const resp = await fetch('http://localhost:3000/run-pa11y', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url }) // ✅ URL, not HTML
+                });
+                const data = await resp.json();
+                sendResponse({ ok: true, data });
+            } catch (err) {
+                console.error('RUN_PA11Y error:', err);
+                sendResponse({ ok: false, error: err.message });
+            }
+        })();
+
+        return true;
+    }
+
+});
+
+
 // Function to extract contrast issues from Pa11y report
 function extractContrastFailures(issues) {
   const contrastFailures = [];

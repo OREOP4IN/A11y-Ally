@@ -337,8 +337,21 @@
       "count": 17
     }
   },
-  "https://kemahasiswaan.itb.ac.id/organization-structure": {
-    "ts": 1761991132212,
+  "chrome-extension://hlkhpgmalamjigbbekdfmbkbfelmphfk/background.js": {
+    "ts": 1766079579952,
+    "alts": [
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
+        "alt": "Chevron down"
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 4
+    }
+  },
+  "https://kemahasiswaan.itb.ac.id/itb-dan-pemprov-jabar-perkuat-sinergi-melalui-penyaluran-beasiswa-jenius-2025": {
+    "ts": 1766081776214,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -351,40 +364,46 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/contact": {
-    "ts": 1761991279238,
+    "ts": 1766081279515,
+    "alts": [
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
+        "alt": "Chevron down"
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 4
+    }
+  },
+  "https://kemahasiswaan.itb.ac.id/ekspedisi-patriot-itb-uncen-dorong-penguatan-kolaborasi-pembangunan-kawasan-transmigrasi-prafi-melalui-lokakarya-dan-fgd-terpusat": {
+    "ts": 1766097817298,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
         "alt": "Chevron down"
       },
       {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-youtube-30.png",
-        "alt": "A pixelated red play button icon."
-      },
-      {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-instagram-30.png",
-        "alt": "A pixelated square icon with a gradient of purple, pink, orange, and yellow, containing a white outline of a camera."
-      },
-      {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-x-30.png",
-        "alt": "A stylized letter X in white on a dark gray square background with rounded corners."
-      },
-      {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-facebook-30.png",
-        "alt": "A blue circle with a white lowercase 'f' in the center."
-      },
-      {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-line-30.png",
-        "alt": "A green square with a white speech bubble containing the word \"LINE\" in white text."
-      },
-      {
-        "src": "https://kemahasiswaan.itb.ac.id/icons/icons8-whatsapp-30.png",
-        "alt": "Speech bubble icon."
+        "src": "https://kemahasiswaan.itb.ac.id/storage/contents/01KAF452VTK20PA2B2G4J9FV4X.jpeg",
+        "alt": "A group of people stand together in front of a banner and a screen."
       }
     ],
     "meta": {
       "source": "auto",
-      "count": 10
+      "count": 5
+    }
+  },
+  "https://www.google.com/search?q=try+then+js&num=10&sca_esv=1f0bb9d93a692111&sxsrf=AE3TifOwM4rhpJzXPw4WJpt4GQXRVqAErw%3A1766086486351&source=hp&ei=VldEac7HE-i-juMPov6CqQI&iflsig=AOw8s4IAAAAAaURlZq7RVqwHXrkVjK90P7g48hS6zI2-&ved=0ahUKEwjOyqPt8MeRAxVon2MGHSK_ICUQ4dUDCB0&uact=5&oq=try+then+js&gs_lp=Egdnd3Mtd2l6Igt0cnkgdGhlbiBqczIGEAAYFhgeMgYQABgWGB4yBRAAGO8FMgUQABjvBTIFEAAY7wVIpchSUABYnMdScAR4AJABAJgBrAKgAdMQqgEIMTEuMy4yLjG4AQPIAQD4AQGYAhWgArYRqAIKwgIEECMYJ8ICChAjGPAFGCcYyQLCAhIQIxjwBRiABBgTGCcYyQIYigXCAgcQABiABBgTwgIJEAAYgAQYExgKwgIIEAAYgAQYywHCAgoQABiABBgKGMsBwgIEEAAYHsICBxAjGCcY6gLCAg0QIxjwBRgnGMkCGOoCwgIQECMYJxjoBhjqAhidBhjdBcICChAjGPAFGCcY6gLCAgwQIxiABBgTGCcYigXCAggQABgWGAoYHpgDBvEFheCPmCibc2ySBwgxMy41LjIuMaAH9WKyBwc5LjUuMi4xuAenEcIHBjAuMTIuOcgHQ4AIAA&sclient=gws-wiz": {
+    "ts": 1766087846425,
+    "alts": [
+      {
+        "src": "https://fonts.gstatic.com/s/i/productlogos/youtube/v9/192px.svg",
+        "alt": "192px"
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 3
     }
   }
 }

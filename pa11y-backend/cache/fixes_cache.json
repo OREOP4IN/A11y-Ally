@@ -34,7 +34,7 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/": {
-    "ts": 1761991845883,
+    "ts": 1767855656293,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -351,16 +351,20 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/itb-dan-pemprov-jabar-perkuat-sinergi-melalui-penyaluran-beasiswa-jenius-2025": {
-    "ts": 1766081776214,
+    "ts": 1767855689595,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
         "alt": "Chevron down"
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/storage/contents/01KAF55K61SMQP48J3ZZBHXC9Y.JPG",
+        "alt": "Four people stand behind a table in front of a screen displaying text and logos."
       }
     ],
     "meta": {
       "source": "auto",
-      "count": 4
+      "count": 5
     }
   },
   "https://kemahasiswaan.itb.ac.id/contact": {
@@ -404,6 +408,164 @@
     "meta": {
       "source": "auto",
       "count": 3
+    }
+  },
+  "https://www.google.com/": {
+    "ts": 1766493369559,
+    "alts": [
+      {
+        "src": "https://lh3.googleusercontent.com/ogw/AF2bZyh6PGjzp2d8-QaXEkerxgccpdBNIV68CO64vI1l3XzHf0k=s32-c-mo",
+        "alt": "Astronaut in a helmet with hands clasped."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 1
+    }
+  },
+  "https://karir.itb.ac.id/": {
+    "ts": 1766492538013,
+    "alts": [
+      {
+        "src": "https://karir.itb.ac.id/theme/images/facebook.svg",
+        "alt": "Facebook"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/instagram.svg",
+        "alt": "Instagram"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/twitter.svg",
+        "alt": "Twitter"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/youtube.svg",
+        "alt": "Youtube"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/line.svg",
+        "alt": "Line"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/prev-arrow.svg",
+        "alt": "Prev arrow"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/next-arrow.svg",
+        "alt": "Next arrow"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/keyboard-arrow-gold-right.svg",
+        "alt": "Keyboard arrow gold right"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/facebook-primary.svg",
+        "alt": "Facebook primary"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/twitter-primary.svg",
+        "alt": "Twitter primary"
+      },
+      {
+        "src": "https://karir.itb.ac.id/theme/images/whatsapp-primary.svg",
+        "alt": "Whatsapp primary"
+      },
+      {
+        "src": "https://karir.itb.ac.id/img/gallery/RnD%20Admin%20Staff.png",
+        "alt": "Job opening for R&D Administration Staff with responsibilities and requirements listed."
+      },
+      {
+        "src": "https://karir.itb.ac.id/img/gallery/QA%20Staff.png",
+        "alt": "Job advertisement for a Quality Assurance Staff position, detailing responsibilities and requirements."
+      },
+      {
+        "src": "https://karir.itb.ac.id/img/gallery/Flyer%20PT%20Sunthi%20Sepuri_SUPERVISOR%20TEKNIK_Desember%202025.jpg",
+        "alt": "A man in a hard hat smiles while holding a clipboard. Text reads \"WE ARE HIRING\"."
+      },
+      {
+        "src": "https://karir.itb.ac.id/img/gallery/Flyer%20PT%20Sunthi%20Sepuri_FORMULATION%20DEVELOPMENT%20OPERATOR_Desember%202025.jpg",
+        "alt": "Job advertisement for a Formulation Development Operator, listing qualifications and responsibilities."
+      },
+      {
+        "src": "https://karir.itb.ac.id/img/gallery/Energize%20Poster.jpg",
+        "alt": "Career fair for international opportunities with Japanese companies in Singapore on February 7th, 2026."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 55
+    }
+  },
+  "https://www.google.com/search?q=friv&oq=fri&gs_lcrp=EgZjaHJvbWUqBggCEEUYOzIGCAAQRRg5MgYIARBFGEAyBggCEEUYOzIGCAMQRRhB0gEINDgyNWowajeoAgCwAgA&sourceid=chrome&ie=UTF-8": {
+    "ts": 1766492707462,
+    "alts": [
+      {
+        "src": "https://lh3.googleusercontent.com/ogw/AF2bZyh6PGjzp2d8-QaXEkerxgccpdBNIV68CO64vI1l3XzHf0k=s32-c-mo",
+        "alt": "Astronaut in a helmet with hands clasped."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 1
+    }
+  },
+  "https://www.google.com/search?q=play+casuality&num=10&sca_esv=50ea77102f6ce127&sxsrf=AE3TifMrP1FjjNtalQP2EuGT4yWulzUIMQ%3A1766492775516&source=hp&ei=Z4pKabesHbuw4-EPoabgiAU&iflsig=AOw8s4IAAAAAaUqYd3vr50lfcb77LZBojYIAi-RPt-Gt&ved=0ahUKEwj3-4Wz2tORAxU72DgGHSETGFEQ4dUDCB0&uact=5&oq=play+casuality&gs_lp=Egdnd3Mtd2l6Ig5wbGF5IGNhc3VhbGl0eTIGEAAYDRgeMgYQABgNGB4yCBAAGAUYDRgeMggQABgIGA0YHjIIEAAYCBgNGB4yCBAAGAgYDRgeMggQABgIGA0YHjILEAAYgAQYhgMYigUyCBAAGKIEGIkFMgUQABjvBUjMEFAAWMkOcAB4AJABAZgBgAOgAb4TqgEHMC44LjQuMbgBA8gBAPgBAZgCDKACnhLCAgoQIxiABBgnGIoFwgIEECMYJ8ICDRAAGIAEGLEDGEMYigXCAgsQABiABBixAxiDAcICCxAuGIAEGLEDGIMBwgIOEC4YgAQYsQMYgwEYigXCAggQABiABBixA8ICEBAjGPAFGIAEGCcYyQIYigXCAgoQLhiABBhDGIoFwgIKEAAYgAQYQxiKBcICEBAAGIAEGLEDGEMYgwEYigXCAgsQLhiABBjHARivAcICBRAAGIAEwgIFEC4YgATCAggQABiABBjLAcICBxAAGIAEGArCAgkQABiABBgKGAvCAgYQABgWGB7CAgUQIRigAcICBRAhGJ8FmAMAkgcHMC43LjQuMaAHyWGyBwcwLjcuNC4xuAeeEsIHBzAuMy40LjXIB1eACAA&sclient=gws-wiz": {
+    "ts": 1766492786341,
+    "alts": [
+      {
+        "src": "https://lh3.googleusercontent.com/ogw/AF2bZyh6PGjzp2d8-QaXEkerxgccpdBNIV68CO64vI1l3XzHf0k=s32-c-mo",
+        "alt": "Astronaut in a helmet with hands clasped."
+      },
+      {
+        "src": "https://fonts.gstatic.com/s/i/productlogos/youtube/v9/192px.svg",
+        "alt": "192px"
+      },
+      {
+        "src": "https://www.gstatic.com/images/branding/product/1x/youtube_32dp.png",
+        "alt": "Red play button icon."
+      },
+      {
+        "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADNklEQVR4AcXUA4wdURiG4VPbtu32mmvUtm3bts2gnNq2bbtBbSzn3n79M8nZrvdcZZO8yUTzPUMGIFmLOlBJTXhtqcPUUaoDxRwp16aObORuHcNpxmwnUjM5/uICam0PyKza2miJSmoGOlH0HlIGjwPUm9tOqrXdD6qt9RANEb39VEGPAXym/5YMK9ehxu5ahKgbH4I3m0rjdoDfBEj+EwDDyrUiiO9UR7ffAd8pMvzHAyJ3Ivr74R7AtD8SIRATURO1ttWBakuCCN4BqrDLAApRiAmAcflm1NilJUSwCAJqqcm8nBs7pRu4y+gCIAoRqdwJ07LtdCfUSSLUlEZqjBQbevwctVvX1QUA7zd8pkYIIfh41o2d0Xh7ICJOpAFOsic0ZHYBIIZQKynjaLQtCPLJVKCrRyQhaAjUYaqIMCBxxA5CqAgRRIjmUMapzBu7oHG0cZmPx2welU4AkARi6T7U3KWHanuAgshCV952hy/sJ1MmNs77Q5mcAHBEuIKwLD6Mmrv1yCS1QMftfsApJjLO+0A1cxjAEb5TwxRE/uX30PmkFrjAgJPRn7lQklMAXwL4TAtB8UVA927PIA8sBNxikC+mhHzMgwA+7j0tFEWXAN1GXkGksSzkMpXxdWBZ/L3LYLvMRBHfqLbCAD7uNT0MJRYDfYedQ4S5FOymonjvbcD7Slb86Fsa9psM9itJIuxUsPhLGG282BJg8ODjgL4QbKbieO+nxyc/NT55a/CughXfu5dLCrGGyir2GcYzPoTGYSiESFNJGtfhk69aSUH4qPG+YoKIc1Q58R+R+Hj8iJ5lYbuUArazKd/QkL9Tv2Lfqb9hpfGiSYzHh3hXxjv05/Di/e23GB8TB/Bxy4xw5YUbMfAwjRdJajw6Yun7KpaM37uWY/YbBDjpIICP023HxH47AV0ehJtLi4wfp0pR7H01M6OvwnGA/9Rf0v/xHTSeF2GWMviQ+PhzykoxJVcA1eZBKh5jvGxi47+oHnzULYCacyFN7is0Po9KRzG3Am7XbzopxFoeoZZyCY0foIrwIbcDZFPxzN+9qy2JZ/whZeADngJEP0k76gB1kOooOuwKIFn7B3LHHIJtp64TAAAAAElFTkSuQmCC",
+        "alt": "Four colored quadrants in a square."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 8
+    }
+  },
+  "https://kbhgames.com/game/causality": {
+    "ts": 1766492792820,
+    "alts": [
+      {
+        "src": "https://kbhgames.com/m.svg",
+        "alt": "M"
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 18
+    }
+  },
+  "https://www.google.com/search?q=cookie+clicker&oq=cookie+clicker&gs_lcrp=EgZjaHJvbWUyBggAEEUYOdIBCDIxMzVqMGo0qAIAsAIB&sourceid=chrome&ie=UTF-8": {
+    "ts": 1766492805091,
+    "alts": [
+      {
+        "src": "https://lh3.googleusercontent.com/ogw/AF2bZyh6PGjzp2d8-QaXEkerxgccpdBNIV68CO64vI1l3XzHf0k=s32-c-mo",
+        "alt": "Astronaut in a helmet with hands clasped."
+      },
+      {
+        "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAADNklEQVR4AcXUA4wdURiG4VPbtu32mmvUtm3bts2gnNq2bbtBbSzn3n79M8nZrvdcZZO8yUTzPUMGIFmLOlBJTXhtqcPUUaoDxRwp16aObORuHcNpxmwnUjM5/uICam0PyKza2miJSmoGOlH0HlIGjwPUm9tOqrXdD6qt9RANEb39VEGPAXym/5YMK9ehxu5ahKgbH4I3m0rjdoDfBEj+EwDDyrUiiO9UR7ffAd8pMvzHAyJ3Ivr74R7AtD8SIRATURO1ttWBakuCCN4BqrDLAApRiAmAcflm1NilJUSwCAJqqcm8nBs7pRu4y+gCIAoRqdwJ07LtdCfUSSLUlEZqjBQbevwctVvX1QUA7zd8pkYIIfh41o2d0Xh7ICJOpAFOsic0ZHYBIIZQKynjaLQtCPLJVKCrRyQhaAjUYaqIMCBxxA5CqAgRRIjmUMapzBu7oHG0cZmPx2welU4AkARi6T7U3KWHanuAgshCV952hy/sJ1MmNs77Q5mcAHBEuIKwLD6Mmrv1yCS1QMftfsApJjLO+0A1cxjAEb5TwxRE/uX30PmkFrjAgJPRn7lQklMAXwL4TAtB8UVA927PIA8sBNxikC+mhHzMgwA+7j0tFEWXAN1GXkGksSzkMpXxdWBZ/L3LYLvMRBHfqLbCAD7uNT0MJRYDfYedQ4S5FOymonjvbcD7Slb86Fsa9psM9itJIuxUsPhLGG282BJg8ODjgL4QbKbieO+nxyc/NT55a/CughXfu5dLCrGGyir2GcYzPoTGYSiESFNJGtfhk69aSUH4qPG+YoKIc1Q58R+R+Hj8iJ5lYbuUArazKd/QkL9Tv2Lfqb9hpfGiSYzHh3hXxjv05/Di/e23GB8TB/Bxy4xw5YUbMfAwjRdJajw6Yun7KpaM37uWY/YbBDjpIICP023HxH47AV0ehJtLi4wfp0pR7H01M6OvwnGA/9Rf0v/xHTSeF2GWMviQ+PhzykoxJVcA1eZBKh5jvGxi47+oHnzULYCacyFN7is0Po9KRzG3Am7XbzopxFoeoZZyCY0foIrwIbcDZFPxzN+9qy2JZ/whZeADngJEP0k76gB1kOooOuwKIFn7B3LHHIJtp64TAAAAAElFTkSuQmCC",
+        "alt": "Four colored quadrants in a square."
+      },
+      {
+        "src": "data:image/gif;base64,R0lGODlhAQABAIAAAP///////yH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
+        "alt": "A black image."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 9
     }
   }
 }

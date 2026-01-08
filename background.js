@@ -1,32 +1,3 @@
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.type === 'GENERATE_A11Y_CSS') {
-    console.log('Pa11y A11Y CSS Generation Triggered');
-    console.log('Received Pa11y Report:', request.report);
-    
-    const issues = Object.values(request.report.results)[0];
-    console.log('Issues:', issues);
-
-    const contrastFailures = extractContrastFailures(issues);
-    console.log('Contrast Failures:', contrastFailures);
-
-    const generatedCSS = generateCSSForContrastFixes(contrastFailures);
-    console.log('Generated CSS:', generatedCSS);
-
-    // Send CSS to content script for injection into the page
-    chrome.scripting.executeScript({
-        target: { tabId: sender.tab.id },
-        func: injectCSS,
-        args: [generatedCSS]
-    }).then(() => {
-        console.log('CSS successfully injected into the page.');
-    }).catch((error) => {
-        console.error('Error injecting CSS:', error);
-    });
-
-    sendResponse({ ok: true, message: 'CSS injected for contrast fixes.' });
-  }
-});
-
 // chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 //   if (request.type === 'GENERATE_A11Y_CSS') {
 //     console.log('masok content script')
@@ -64,6 +35,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         })();
 
         return true;
+    }
+    if (msg.type === 'GENERATE_A11Y_CSS') {
+        console.log('Pa11y A11Y CSS Generation Triggered');
+        console.log('Received Pa11y Report:', msg.report);
+        
+        const issues = Object.values(msg.report.results)[0];
+        console.log('Issues:', issues);
+
+        const contrastFailures = extractContrastFailures(issues);
+        console.log('Contrast Failures:', contrastFailures);
+
+        const generatedCSS = generateCSSForContrastFixes(contrastFailures);
+        console.log('Generated CSS:', generatedCSS);
+        
+        if (!generatedCSS) {
+            sendResponse({ ok: true, message: 'No contrast issues found.' });
+            return;
+        }
+
+        // Send CSS to content script for injection into the page
+        chrome.scripting.executeScript({
+            target: { tabId: sender.tab.id },
+            func: injectCSS,
+            args: [generatedCSS]
+        }).then(() => {
+            console.log('CSS successfully injected into the page.');
+        }).catch((error) => {
+            console.error('Error injecting CSS:', error);
+            sendResponse({ ok: false, message: 'CSS injection failed.' });
+
+        });
+
+        sendResponse({ ok: true, message: 'CSS injected for contrast fixes.' });
     }
     if (msg.type === 'GEN_ALT') {
         const src = msg.src;
@@ -112,11 +116,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const meta = msg.meta;
             const location = msg.location;
             console.log('locationhref111111', location);
-            await fetch('http://localhost:3000/save-fixes', {
+            const save_fixes = await fetch('http://localhost:3000/save-fixes', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url: location, alts, meta })
             });
+            console.log('savePageFixes success', save_fixes.ok, save_fixes.status);
         } catch (err) {
             console.warn('savePageFixes failed:', err);
         }
@@ -131,10 +136,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const resp = await fetch('http://localhost:3000/run-pa11y', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url }) // ✅ URL, not HTML
+                    body: JSON.stringify({ url: url })
                 });
                 const data = await resp.json();
-                sendResponse({ ok: true, data });
+                if (data.total == 1 && data.errors == 0 && data.passes == 0) {
+                    sendResponse({ ok: false, error: "Pa11y timed out" });
+                } else {
+                    sendResponse({ ok: true, data });
+                }
             } catch (err) {
                 console.error('RUN_PA11Y error:', err);
                 sendResponse({ ok: false, error: err.message });
@@ -143,7 +152,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         return true;
     }
+    if (msg.type === 'ENV_MODE') {
+        (async () => {
+            try {
+                const url = new URL('http://localhost:3000/env-mode');
+                const resp = await fetch('http://localhost:3000/env-mode', {
+                    method: 'GET',
+                });
+                const data = await resp.json();
+                sendResponse({ ok: true, data });
+                // if (!resp) return null;
+                // return await resp.json();
+            } catch (err) {
+                console.error('env check failed:', err);
+                sendResponse({ ok: false, error: err.message });
+            }
+        })();
 
+        return true;
+    }
 });
 
 

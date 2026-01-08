@@ -1,5 +1,11 @@
 // File: content.js
-
+// const mode = await runPromisify('ENV_MODE');
+// console.log(mode);
+// function logDev() {
+//   if (mode == 'development') {
+//     console.log(...arguments);
+//   } 
+// }
 console.log("Content script loadeadadadd.");
 
 // Optional tiny helpers
@@ -55,10 +61,18 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 }
 
 function runManualFixes() {
+  let successfulRuns = {
+    "runGeneralFixes": 0,
+    "savePageFixes": 0,
+    "pa11yResult": 0,
+    "GENERATE_A11Y_CSS": 0,
+    "runPromisify": 0,
+  }
   console.log('masuk async run (content.js)');
   (async () => {
     try {
       const applied = await runGeneralFixes();
+      console.log('check results applied', applied);
       if (applied?.length) {
         try {
           await savePageFixes(applied, { source: 'auto', count: applied.length });
@@ -67,7 +81,6 @@ function runManualFixes() {
         }
       }
 
-    console.log('pak eko');
     const url = window.location.href;
     const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
 
@@ -82,52 +95,21 @@ function runManualFixes() {
     // if (useHtml) { /* cari di repo lama */ }
 
     const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
-    // (async () => {
-    //   chrome.runtime.sendMessage(
-    //     { type: 'RUN_PA11Y', url: url },
-    //     (resp) => {
-    //       if (!resp || !resp.ok) {
-    //         console.error('RUN_PA11Y failed:', resp?.error);
-    //         return;
-    //       }
-    //       console.log('RUN_PA11Y result:', resp.data);
-    //       const pa11yResult = resp.data;
-
-    //     }
-    //   );
-    // })();
-    
-    // const scanResponse = await fetch('http://localhost:3000/run-pa11y', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ url: url }) // ✅ URL, not HTML
-    // });
-
     const pa11yReport = pa11yResult.data;
-    console.log('pa11yResult:', pa11yReport);
+
     console.log('pa11yResult:', pa11yReport);
     console.log('pa11yResult:', JSON.stringify(pa11yResult.data));
+
     if (!pa11yResult.ok) {
       const t = JSON.stringify(pa11yReport);
       throw new Error(`Server ${pa11yResult.status}. ${t || ''}`.trim());
     }
-
-    console.log('alhamdullilah');
     
-    // Send the Pa11y report to the content script for generating A11Y CSS
-    // chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    //   chrome.tabs.sendMessage(tabs[0].id, {
-    //     type: 'GENERATE_A11Y_CSS',
-    //     report: report
-    //   });
-    // });
-
-    console.log('report konten sayang:', pa11yReport);
     chrome.runtime.sendMessage({
       type: 'GENERATE_A11Y_CSS',
       report: pa11yReport
     }, (response) => {
-      console.log(response.message);
+      console.log('ni response', response);
     });
 
     } catch (e) {
@@ -137,37 +119,9 @@ function runManualFixes() {
 
   return true;
 }
-// Listen for messages from the popup
+
 // NOTES: keknya kudu di-optimasi; beda2 metode soalnya
-// content.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  // if (request.type === "RUN_MANUAL_FIXES") {
-  //   // ASYNC branch: we will call sendResponse later -> return true
-  //   (async () => {
-  //     try {
-  //       // Run all fixes and alt generation; collect what was applied
-  //       const applied = await runGeneralFixes(); // should return [{src, alt}, ...]
-
-  //       // Reply ASAP so popup doesn’t time out
-  //       sendResponse({ ok: true, appliedCount: applied?.length || 0 });
-
-  //       // Persist AFTER replying (fire-and-forget)
-  //       if (applied?.length) {
-  //         try {
-  //           await savePageFixes(applied, { source: 'auto', count: applied.length });
-  //         } catch (e) {
-  //           console.warn('savePageFixes failed (post-reply):', e);
-  //         }
-  //       }
-  //     } catch (e) {
-  //       console.error('runGeneralFixes failed:', e);
-  //       // Reply exactly once on error
-  //       try { sendResponse({ ok: false, error: String(e?.message || e) }); } catch {}
-  //     }
-  //   })();
-  //   return true; // keep port open for async sendResponse
-  // }
-
   if (request.type === "GET_HTML") {
     // SYNC branch: respond immediately, do NOT return true
     try {
@@ -180,6 +134,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === "GENERATE_ALT_TEXT") {
+    // NOTES: ASYNC branch: use return true biar gak langsung nutup
     (async () => {
       try {
         const applied = await generateAltForImages(); // return [{src, alt}, ...]
@@ -199,6 +154,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   sendResponse({ ok: false, error: 'Unknown request.type' });
 });
 
+// NOTES: ini klo terima request dari popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'GENERATE_A11Y_CSS') {
     console.log('masok content script')
@@ -208,9 +164,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       type: 'GENERATE_A11Y_CSS',
       report: pa11yReport
     }, (response) => {
-      console.log(response.message);
+      console.log(response);
     });
-    // chrome.runtime.sendMessage({  // Ran twice incase ada yg kelewatan idk tho
+    // chrome.runtime.sendMessage({  // Ran twice incase ada yg kelewatan gak terlalu optimal idk tho
     //   type: 'GENERATE_A11Y_CSS',
     //   report: pa11yReport
     // }, (response) => {
@@ -219,9 +175,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-
-
 async function runGeneralFixes() {
+  console.log('masuk runGeneralFixes');
   // === general fixes ===
   document.querySelectorAll('[align]').forEach(el => {
     const alignValue = el.getAttribute('align');
@@ -563,42 +518,6 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
         );
       })();
     }
-
-      // try {
-      //   const resp = await fetch('http://localhost:3000/alt-lookup', {
-      //     method: 'POST',
-      //     headers: {'Content-Type':'application/json'},
-      //     body: JSON.stringify({ srcs: uniqueSrcs })
-      //   });
-      //   if (resp.ok) {
-      //     const data = await resp.json(); // {hits:[{src,alt}], misses:[...]}
-      //     hits = data.hits || [];
-      //     misses = data.misses || uniqueSrcs;
-      //   }
-      // } catch (e) {
-      //   console.warn('alt-lookup failed; will generate for all:', e);
-      // }
-  
-
-      // try {
-      //   const ctrl = new AbortController();
-      //   const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
-      //   const r = await fetch('http://localhost:3000/generate-alt-text', {
-      //     method: 'POST',
-      //     headers: { 'Content-Type': 'application/json' },
-      //     body: JSON.stringify({ imageUrl: src, prefer }),
-      //     signal: ctrl.signal
-      //   });
-      //   clearTimeout(to);
-      //   if (!r.ok) throw new Error('HTTP '+r.status);
-      //   const j = await r.json();
-      //   if (j && j.altText) {
-      //     img.setAttribute('alt', j.altText);
-      //     applied.push({ src, alt: j.altText });
-      //   }
-      // } catch (e) {
-      //   console.warn('ALT gen failed', src, e);
-      // }
   }
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, nonSvgImgs.length)) }, worker));
 
@@ -640,7 +559,7 @@ async function fetchPageFixes() {
 }
 
 async function savePageFixes(alts, meta = {}) {
-  console.log("savePageFixes");
+  console.log("masuk savePageFixes");
   console.log('locationhref', location.href);
   const locationhref = location.href;
 
@@ -650,10 +569,9 @@ async function savePageFixes(alts, meta = {}) {
       (resp) => {
         if (!resp || !resp.ok) {
           console.error('SAVE_FIXES failed:', resp?.error);
-          return;
+          // return;
         }
         console.log('SAVE_FIXES result:', resp.data);
-        // use resp.data here
       }
     );
   })();

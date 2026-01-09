@@ -116,13 +116,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const meta = msg.meta;
             const location = msg.location;
             console.log('locationhref111111', location);
-            const save_fixes = await fetch('http://localhost:3000/save-fixes', {
+            const resp = await fetch('http://localhost:3000/save-fixes', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url: location, alts, meta })
             });
-            console.log('savePageFixes success', save_fixes.ok, save_fixes.status);
+
+            const data = await resp.json();
+            console.log('savePageFixes success', data);
+            sendResponse({ ok: true, data });
         } catch (err) {
+            sendResponse({ ok: false, error: err.message });
             console.warn('savePageFixes failed:', err);
         }
         })();

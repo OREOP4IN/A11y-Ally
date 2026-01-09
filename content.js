@@ -63,54 +63,61 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 function runManualFixes() {
   let successfulRuns = {
     "runGeneralFixes": 0,
+    "generateAltImages": 0,
     "savePageFixes": 0,
     "pa11yResult": 0,
     "GENERATE_A11Y_CSS": 0,
-    "runPromisify": 0,
   }
   console.log('masuk async run (content.js)');
   (async () => {
     try {
-      const applied = await runGeneralFixes();
-      console.log('check results applied', applied);
-      if (applied?.length) {
+      const data = await runGeneralFixes();
+      const applied = data?.applied;
+      
+      successfulRuns.runGeneralFixes = data.ok;
+      successfulRuns.generateAltImages = data.ok;
+      console.log('check results applied', data);
+
+      if (data?.applied?.length) {
         try {
-          await savePageFixes(applied, { source: 'auto', count: applied.length });
+          const resp = await savePageFixes(applied, { source: 'auto', count: applied.length });
+          console.log('savepagefixes data', resp);
+          successfulRuns.savePageFixes = resp.ok;
         } catch (e) {
-          console.warn('savePageFixes failed (post-reply):', e);
+          console.warn('auto savePageFixes failed (post-reply):', e);
         }
       }
 
-    const url = window.location.href;
-    const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
+      const url = window.location.href;
+      const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
 
-    if (disallowed.test(url)) {
-      console.error('This page type cannot be scanned. Open a normal http(s) page.');
-    } else {
-      console.log('Scanning URL:', url);
-    }
+      if (disallowed.test(url)) {
+        console.error('This page type cannot be scanned. Open a normal http(s) page.');
+      } else {
+        console.log('Scanning URL:', url);
+      }
 
-    // uncomment to keep the old HTML flow behind a flag:
-    // const useHtml = false;
-    // if (useHtml) { /* cari di repo lama */ }
+      const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
+      const pa11yReport = pa11yResult.data;
 
-    const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
-    const pa11yReport = pa11yResult.data;
+      successfulRuns.pa11yResult = pa11yResult.ok;
 
-    console.log('pa11yResult:', pa11yReport);
-    console.log('pa11yResult:', JSON.stringify(pa11yResult.data));
+      console.log('pa11yResult:', pa11yResult);
+      console.log('pa11yResult:', JSON.stringify(pa11yResult.data));
 
-    if (!pa11yResult.ok) {
-      const t = JSON.stringify(pa11yReport);
-      throw new Error(`Server ${pa11yResult.status}. ${t || ''}`.trim());
-    }
-    
-    chrome.runtime.sendMessage({
-      type: 'GENERATE_A11Y_CSS',
-      report: pa11yReport
-    }, (response) => {
-      console.log('ni response', response);
-    });
+      if (!pa11yResult.ok) {
+        const t = JSON.stringify(pa11yReport);
+        throw new Error(`Server ${pa11yResult.status}. ${t || ''}`.trim());
+      }
+      
+      chrome.runtime.sendMessage({
+        type: 'GENERATE_A11Y_CSS',
+        report: pa11yReport
+      }, (response) => {
+        console.log('ni response', response);
+        successfulRuns.GENERATE_A11Y_CSS = response.ok;
+      });
+      console.log('check runs', successfulRuns);
 
     } catch (e) {
       console.error('runGeneralFixes failed:', e);
@@ -141,7 +148,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ ok: true, appliedCount: applied?.length || 0 });
         if (applied?.length) {
           try { await savePageFixes(applied, { source: 'manual', count: applied.length }); }
-          catch (e) { console.warn('savePageFixes failed (post-reply):', e); }
+          catch (e) { console.warn('manual savePageFixes failed (post-reply):', e); }
         }
       } catch (e) {
         console.error('generateAltForImages failed:', e);
@@ -444,27 +451,34 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
   console.log('run gen alt');
 
   // collect targets (no existing alt)
-  const imgs = [...document.querySelectorAll('img')].filter(img => !img.getAttribute('alt')?.trim());
-  if (!imgs.length) return [];
+  const imgs = [...document.querySelectorAll('img')].filter((img) => !img.getAttribute('alt')?.trim());
+  if (!imgs.length) return { applied: [], ok: true };
+
   console.log('imgs', imgs);
 
 
   // de-duplicate srcs to avoid repeated calls
-  const uniqueSrcs = [...new Set(imgs.map(i => i.src).filter(Boolean))];
+  const uniqueSrcs = [...new Set(imgs.map((i) => i.src).filter(Boolean))];
 
   // 1) Try global cache first (cross-page reuse)
-  let hits = [], misses = uniqueSrcs;
-  const alt_lookup = await runPromisify('ALT_LOOKUP', {srcs: uniqueSrcs});
-  console.log(alt_lookup.data); 
-  console.log(alt_lookup.data.hits); 
-  hits = alt_lookup.data.hits || [];
-  misses = alt_lookup.data.misses || uniqueSrcs;
-  
-  console.log('hits', hits);
-  console.log('misses', misses);
-  const hitMap = new Map(hits.map(h => [h.src, h.alt]));
-  const applied = [];
-  
+  let hits = [];
+  let misses = uniqueSrcs;
+
+  let ok = true; // <- top-level ok flag
+  const applied = []; // <- only {src, alt}
+
+  try {
+    const alt_lookup = await runPromisify('ALT_LOOKUP', {srcs: uniqueSrcs});
+    hits = alt_lookup?.data?.hits || [];
+    misses = alt_lookup?.data?.misses || uniqueSrcs;
+  } catch (err) {
+    // cache lookup failed, still continue with generation
+    ok = false;
+    hits = [];
+    misses = uniqueSrcs;
+  }
+
+  const hitMap = new Map(hits.map((h) => [h.src, h.alt]));
 
   // Apply cache hits immediately
   for (const img of imgs) {
@@ -476,54 +490,66 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
   }
 
   // 2) Prepare generation list from remaining images
-  const remainingImgs = imgs.filter(i => !i.getAttribute('alt')?.trim());
+  const remainingImgs = imgs.filter((i) => !i.getAttribute('alt')?.trim());
 
   // Split remaining into SVGs (local fallback) vs others (server)
-  const svgImgs = remainingImgs.filter(i => isSvgSrc(i.src));
-  const nonSvgImgs = remainingImgs.filter(i => !isSvgSrc(i.src));
+  const svgImgs = remainingImgs.filter((i) => isSvgSrc(i.src));
+  const nonSvgImgs = remainingImgs.filter((i) => !isSvgSrc(i.src));
 
   // SVG filename fallback (fast, no network)
   for (const img of svgImgs) {
-    const alt = filenameAlt(img.src);
-    img.setAttribute('alt', alt);
-    applied.push({ src: img.src, alt });
+    try {
+      const alt = filenameAlt(img.src);
+      if (!alt?.trim()) {
+        ok = false;
+        continue;
+      }
+      img.setAttribute('alt', alt);
+      applied.push({ src: img.src, alt });
+    } catch (err) {
+      ok = false;
+    }
   }
 
-  // Generate for non-SVGs with concurrency + timeout
+  // Generate for non-SVGs with concurrency (await runPromisify)
   let idx = 0;
   async function worker() {
     while (idx < nonSvgImgs.length) {
       const img = nonSvgImgs[idx++];
       const src = img.src;
 
-      console.log('genalt src', src);
-      console.log('img', img);
-      console.log('unique', uniqueSrcs);
+      try {
+        const resp = await runPromisify('GEN_ALT', {
+          src,
+          requestTimeoutMs,
+          prefer
+        });
 
-      (async () => {
-        chrome.runtime.sendMessage(
-          { type: 'GEN_ALT', src: src, requestTimeoutMs: requestTimeoutMs, prefer: prefer, img: img},
-          (resp) => {
-            if (!resp || !resp.ok) {
-              console.error('GEN_ALT failed:', resp?.error);
-              return;
-            }
-            console.log('GEN_ALT result:', resp.data);
-            const data = resp.data;
-            if (data && data.altText) {
-                img.setAttribute('alt', data.altText);
-                applied.push({ src, alt: data.altText });
-            }
-          }
-        );
-      })();
+        const altText = resp?.data?.altText;
+
+        if (!altText?.trim()) {
+          ok = false;
+          continue;
+        }
+
+        img.setAttribute('alt', altText);
+        applied.push({ src, alt: altText });
+      } catch (err) {
+        ok = false;
+      }
     }
   }
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, nonSvgImgs.length)) }, worker));
+
+  const workerCount = Math.max(1, Math.min(concurrency, nonSvgImgs.length));
+  await Promise.all(Array.from({ length: workerCount }, worker));
 
   console.log('applied', applied);
-  return applied; // <-- important
-} 
+
+  // Optional: If you want ok=true ONLY when every target img got an alt
+  // (uncomment the next line and remove the "ok" mutations above if you prefer)
+  // ok = imgs.every(img => img.getAttribute('alt')?.trim());
+  return { applied, ok };
+}
 
 async function lookupCachedAlts(srcs) {
   try {
@@ -559,30 +585,20 @@ async function fetchPageFixes() {
 }
 
 async function savePageFixes(alts, meta = {}) {
-  console.log("masuk savePageFixes");
-  console.log('locationhref', location.href);
   const locationhref = location.href;
 
-  (async () => {
-    chrome.runtime.sendMessage(
-      { type: 'SAVE_FIXES', alts: alts, meta: meta, location: locationhref},
-      (resp) => {
-        if (!resp || !resp.ok) {
-          console.error('SAVE_FIXES failed:', resp?.error);
-          // return;
-        }
-        console.log('SAVE_FIXES result:', resp.data);
-      }
-    );
-  })();
+  try {
+    const resp = await runPromisify('SAVE_FIXES', {
+      alts,
+      meta,
+      location: locationhref
+    });
 
-    // try {
-    //     await fetch('http://localhost:3000/save-fixes', {
-    //     method: 'POST',
-    //     headers: {'Content-Type': 'application/json'},
-    //     body: JSON.stringify({ url: location.href, alts, meta })
-    //     });
-    // } catch (e) {
-    //     console.warn('savePageFixes failed:', e);
-    // }
+    console.log('SAVE_FIXES result:', resp.data);
+    return { ok: true, data: resp.data };
+
+  } catch (err) {
+    console.error('SAVE_FIXES failed:', err.message);
+    return { ok: false, error: err.message };
+  }
 }

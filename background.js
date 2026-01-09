@@ -1,22 +1,14 @@
-// chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-//   if (request.type === 'GENERATE_A11Y_CSS') {
-//     console.log('masok content script')
-//     const pa11yReport = request.report;  // Get Pa11y report from the background or popup
-//     console.log('report konten sayang:', pa11yReport);
-//     chrome.runtime.sendMessage({
-//       type: 'GENERATE_A11Y_CSS',
-//       report: pa11yReport
-//     }, (response) => {
-//       console.log(response.message);
-//     });
-//   }
-// });
+// const PA11Y_BACKEND_URL = process.env.PA11Y_BACKEND_URL;
+
+// if (!PA11Y_BACKEND_URL) {
+//   throw new Error('PA11Y_BACKEND_URL is not set');
+// }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ALT_LOOKUP') {
         (async () => {
         try {
-            const resp = await fetch('http://localhost:3000/alt-lookup', {
+            const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/alt-lookup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ srcs: msg.srcs })
@@ -40,7 +32,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         console.log('Pa11y A11Y CSS Generation Triggered');
         console.log('Received Pa11y Report:', msg.report);
         
-        const issues = Object.values(msg.report.results)[0];
+        const issues = Object.values(msg.report.results.issues);
         console.log('Issues:', issues);
 
         const contrastFailures = extractContrastFailures(issues);
@@ -82,7 +74,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 console.log('ctrl', ctrl);
                 const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
                 console.log('to', to);
-                const resp = await fetch('http://localhost:3000/generate-alt-text', {
+                const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/generate-alt-text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageUrl: src, prefer }),
@@ -116,7 +108,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const meta = msg.meta;
             const location = msg.location;
             console.log('locationhref111111', location);
-            const resp = await fetch('http://localhost:3000/save-fixes', {
+            const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/save-fixes', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ url: location, alts, meta })
@@ -137,7 +129,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         (async () => {
             try {
                 const url = msg.url;
-                const resp = await fetch('http://localhost:3000/run-pa11y', {
+                const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/run-pa11y', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: url })
@@ -159,8 +151,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ENV_MODE') {
         (async () => {
             try {
-                const url = new URL('http://localhost:3000/env-mode');
-                const resp = await fetch('http://localhost:3000/env-mode', {
+                const url = new URL('https://pa11y-backend-tisgwzdora-et.a.run.app/env-mode');
+                const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/env-mode', {
                     method: 'GET',
                 });
                 const data = await resp.json();

@@ -34,7 +34,7 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/": {
-    "ts": 1767855656293,
+    "ts": 1767954890938,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -351,7 +351,7 @@
     }
   },
   "https://kemahasiswaan.itb.ac.id/itb-dan-pemprov-jabar-perkuat-sinergi-melalui-penyaluran-beasiswa-jenius-2025": {
-    "ts": 1767855689595,
+    "ts": 1767861119264,
     "alts": [
       {
         "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
@@ -566,6 +566,23 @@
     "meta": {
       "source": "auto",
       "count": 9
+    }
+  },
+  "https://kemahasiswaan.itb.ac.id/mahasiswa-itb-wujudkan-aksi-nyata-di-masyarakat-dalam-program-mahasiswa-berdampak": {
+    "ts": 1767955044658,
+    "alts": [
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/assets/images/chevron-down.svg",
+        "alt": "Chevron down"
+      },
+      {
+        "src": "https://kemahasiswaan.itb.ac.id/storage/contents/01KD205FDZWPA2S6FPRMR2ZYF5.jpg",
+        "alt": "Wanita berhijab menimbang berat badan dibantu petugas kesehatan."
+      }
+    ],
+    "meta": {
+      "source": "auto",
+      "count": 5
     }
   }
 }

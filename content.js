@@ -117,11 +117,10 @@ function runManualFixes() {
         console.log('ni response', response);
         successfulRuns.GENERATE_A11Y_CSS = response.ok;
       });
-      console.log('check runs', successfulRuns);
-
     } catch (e) {
       console.error('runGeneralFixes failed:', e);
     }
+    console.log('check runs', successfulRuns);
   })();
 
   return true;

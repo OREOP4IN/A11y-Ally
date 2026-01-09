@@ -2,39 +2,99 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-const app = express();
-const port = 3000;
+const crypto = require('crypto');
 
 const vision = require('@google-cloud/vision');
 const { VertexAI } = require('@google-cloud/vertexai');
 
-// Configure from env or hardcode like your PHP config
-const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
-const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1'; // Gemini supported
-const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash'; // available & fast
+const app = express();
 
-// Vision preferences like your CI3 config
-const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
-const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
+// ✅ Cloud Run: must listen on process.env.PORT
+const port = process.env.PORT || 3000;
 
-// Instantiate clients (uses GOOGLE_APPLICATION_CREDENTIALS if set)
-const visionClient = new vision.ImageAnnotatorClient(); // {keyFilename: '...'} if you prefer inline
-
-const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
-const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-const crypto = require('crypto');
-
-// ---- Cache paths ----
-const CACHE_DIR = path.join(__dirname, 'cache');
+// ✅ Cloud Run: use temp dir (ephemeral) if you still want file cache
+const CACHE_DIR = process.env.CACHE_DIR || path.join('/tmp', 'cache');
 const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
 const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
 
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+
+// ✅ JSON body
+app.use(express.json({ limit: '50mb' }));
+
+// ✅ CORS (tighten this later)
+app.use(cors({
+  origin: true, // (dev-friendly) replace with a whitelist for prod
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-API-Key'],
+}));
+
+// ✅ Optional API key guard (recommended once public)
+app.use((req, res, next) => {
+  const required = process.env.EXT_API_KEY;
+  if (!required) return next(); // allow if not configured (dev)
+  const provided = req.get('x-api-key');
+  if (provided !== required) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+});
+
+// ---- Your existing env config ----
+const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
+const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1';
+const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash';
+
+const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
+const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
+
+// Clients
+const visionClient = new vision.ImageAnnotatorClient();
+const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+
+// ✅ Listen
+app.listen(port, () => {
+  console.log(`Pa11y backend listening on port ${port}`);
+});
+
+// require('dotenv').config();
+
+// const express = require('express');
+// const cors = require('cors');
+// const { exec } = require('child_process');
+// const fs = require('fs');
+// const path = require('path');
+
+// const app = express();
+// const port = 3000;
+
+// const vision = require('@google-cloud/vision');
+// const { VertexAI } = require('@google-cloud/vertexai');
+
+// // Configure from env or hardcode like your PHP config
+// const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
+// const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1'; // Gemini supported
+// const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash'; // available & fast
+
+// // Vision preferences like your CI3 config
+// const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
+// const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
+
+// // Instantiate clients (uses GOOGLE_APPLICATION_CREDENTIALS if set)
+// const visionClient = new vision.ImageAnnotatorClient(); // {keyFilename: '...'} if you prefer inline
+
+// const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+// const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
+
+// const crypto = require('crypto');
+
+// // ---- Cache paths ----
+// const CACHE_DIR = path.join(__dirname, 'cache');
+// const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
+// const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
+
+// if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
 // Safe load/save helpers
 function loadJson(p) {
@@ -213,7 +273,6 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-
 function escapeHtml(s) {
     return String(s)
         .replace(/&/g, '&amp;')
@@ -221,7 +280,6 @@ function escapeHtml(s) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-
 
 async function generateAltText(imageUrl) {
     console.log("test imageUrl:", imageUrl);
@@ -273,7 +331,7 @@ async function generateAltTextWithGemini(imageUrl) {
         role: 'user',
         parts: [
             { inlineData: { mimeType, data: buf.toString('base64') } },
-            { text: 'Write a concise, neutral ALT text (<=120 chars), no branding, no speculation.' }
+            { text: 'Write a concise, neutral, indonesian ALT text (<=120 chars), no branding, no speculation' }
         ]
         }],
         generationConfig: { maxOutputTokens: 64, temperature: 0.2 }
@@ -293,6 +351,11 @@ async function generateAltTextWithGemini(imageUrl) {
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // payload limit to handle large HTML strings
+// app.listen(port, () => {
+//     console.log(`Pa11y backend listening at http://localhost:${port}`);
+// });
+
+app.listen(port, () => console.log(`Listening on ${port}`));
 
 // POST /alt-lookup  body: { srcs: ["https://...","https://..."] }
 app.post('/alt-lookup', (req, res) => {
@@ -460,7 +523,8 @@ app.post('/run-pa11y', (req, res) => {
         },
         urls: [url]  // Use the URL directly for testing
     };
-
+    
+    console.log("check config creation");
     const configPath = path.join(__dirname, 'temp_pa11yci.json');
     fs.writeFileSync(configPath, JSON.stringify(pa11yConfig, null, 2));
 
@@ -470,6 +534,7 @@ app.post('/run-pa11y', (req, res) => {
 
     exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {
         // Clean up the temp config file
+        console.log("check config delete");
         fs.unlinkSync(configPath);
 
         if (error && error.code !== 2) {
@@ -496,6 +561,3 @@ app.post('/run-pa11y', (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Pa11y backend listening at http://localhost:${port}`);
-});

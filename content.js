@@ -6,6 +6,18 @@
 //     console.log(...arguments);
 //   } 
 // }
+
+const SETTINGS_KEY = 'autoFixEnabled';
+
+async function isAutoFixEnabled() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get({ autoFixEnabled: false }, ({ autoFixEnabled }) => {
+      resolve(autoFixEnabled);
+    });
+  });
+}
+
+
 console.log("Content script loadeadadadd.");
 
 // Optional tiny helpers
@@ -54,10 +66,33 @@ async function runPromisify(title, payload = {}) {
   }
 }
 
+let __autoFixInitRan = false;
+
+async function initAutoFix() {
+  if (__autoFixInitRan) return;       // prevent double-run
+  __autoFixInitRan = true;
+
+  try {
+    const enabled = await isAutoFixEnabled();
+    console.log('autofix:', enabled);
+
+    if (!enabled) return;
+
+    // optional: give the page a microtask/tick to settle
+    await new Promise((r) => setTimeout(r, 0));
+
+    await runManualFixes(); // make runManualFixes async if it isn't
+  } catch (err) {
+    console.error('initAutoFix error:', err);
+  }
+}
+
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  runManualFixes();
+  initAutoFix();
 } else {
-  window.addEventListener('DOMContentLoaded', runManualFixes);
+  document.addEventListener('DOMContentLoaded', () => {
+    initAutoFix();
+  }, { once: true }); // also prevents repeat
 }
 
 function runManualFixes() {

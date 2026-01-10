@@ -505,6 +505,59 @@ app.post('/run-pa11y', async (req, res) => {
     }
 });
 
+// DEBUG TOOLS OPEN TO PUBLIC FOR NOW BIAR TESTING GAMPANG
+
+app.get('/debug/fixes-cache', (req, res) => {
+  try {
+    if (!fs.existsSync(FIXES_CACHE_PATH)) {
+      return res.json({ exists: false });
+    }
+
+    const data = fs.readFileSync(FIXES_CACHE_PATH, 'utf8');
+    res.json({
+      exists: true,
+      size: data.length,
+      data: JSON.parse(data)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/debug/alt-cache', (req, res) => {
+  try {
+    if (!fs.existsSync(ALT_CACHE_PATH)) {
+      return res.json({ exists: false });
+    }
+
+    const data = fs.readFileSync(ALT_CACHE_PATH, 'utf8');
+    res.json({
+      exists: true,
+      size: data.length,
+      data: JSON.parse(data)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/debug/ls', (req, res) => {
+  try {
+    const base = '/usr/src/app';
+    const tmp = '/tmp';
+
+    res.json({
+      appDir: fs.readdirSync(base),
+      tmpDir: fs.existsSync(tmp) ? fs.readdirSync(tmp) : []
+    });
+
+    console.log('APP DIR:', fs.readdirSync('/usr/src/app'));
+    console.log('TMP DIR:', fs.readdirSync('/tmp'));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Pa11y backend listening on port ${port}`);
 });

@@ -1,9 +1,3 @@
-Here’s an upgraded README with **architecture + flow diagrams** (using **Mermaid**, which GitHub renders nicely). I also added diagrams for the parts that benefit most: **Pa11y scan flow**, **ALT generation pipeline**, **caching model**, and **Cloud Run deployment/auth**.
-
-You can paste this into `README.md`.
-
----
-
 # A11y-Ally
 
 ## Introduction
@@ -283,7 +277,3 @@ Contributions are welcome:
 * Cache persistence (Firestore/GCS)
 * UI improvements for reports and diffing
 * Performance improvements for scans
-
----
-* A **Cost-awareness** diagram (Gemini/Vision calls + caching impact)
-* A **data flow/privacy** diagram (what gets sent to backend, what doesn’t)

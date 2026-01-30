@@ -1,32 +1,78 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <title>Pa11y Scanner</title>
-  <style>
-    body { width: 350px; font-family: sans-serif; }
-    button { display: block; width: 100%; padding: 10px; margin-top: 10px; }
-    #results { 
-      white-space: pre-wrap; 
-      background-color: #f4f4f4; 
-      padding: 10px; 
-      margin-top: 10px;
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #ccc;
-    }
-  </style>
-</head>
-<body>
-  <h1>Accessibility Tools</h1>
-  <!-- <button id="manual-fix-button">1. Apply General Fixes</button>
-  <button id="scan-button">2. Scan Fixed Page with Pa11y</button>
-  <button id="alt-text-button">Generate Alt Text for Images</button>
-  <button id="generate-a11y-css-button">Generate A11Y CSS</button> -->
-  
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Pa11y Helper</title>
+    <style>
+      body {
+        font-family: system-ui, Arial, sans-serif;
+        margin: 12px;
+        width: 260px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .hint {
+        margin-top: 8px;
+        font-size: 12px;
+        opacity: 0.75;
+      }
 
-  <!-- <div id="results">Click a button to start.</div> -->
-  <div id="results">Runs automatically in the background!</div>
-  
-  <script src="popup.js"></script>
-</body>
+      /* simple switch */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background-color: #ccc;
+        transition: 0.2s;
+        border-radius: 999px;
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        top: 3px;
+        background-color: white;
+        transition: 0.2s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: #22c55e;
+      }
+      input:checked + .slider:before {
+        transform: translateX(20px);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <div>
+        <div style="font-weight:600;">Auto Fix</div>
+        <div class="hint">Generate/apply alt text automatically</div>
+      </div>
+
+      <label class="switch" title="Toggle Auto Fix">
+        <input id="autoFixToggle" type="checkbox" />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
 </html>

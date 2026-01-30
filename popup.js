@@ -3,6 +3,57 @@ const manualFixButton = document.getElementById('manual-fix-button');
 const scanButton = document.getElementById('scan-button');
 const altTextButton = document.getElementById('alt-text-button');
 const a11yCssButton = document.getElementById('generate-a11y-css-button');
+const KEY = 'autoFixEnabled';
+
+async function getSetting() {
+  const data = await chrome.storage.sync.get({ [KEY]: true }); // default ON
+  return data[KEY];
+}
+
+async function setSetting(value) {
+  await chrome.storage.sync.set({ [KEY]: value });
+}
+
+async function notifyActiveTab(value) {
+  // optional: tell content.js immediately, without requiring page refresh
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: 'AUTO_FIX_TOGGLE_UPDATED',
+      enabled: value,
+    });
+  } catch (e) {
+    // content script may not be injected on some pages; ignore
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const toggle = document.getElementById('autoFixToggle');
+
+  // Load initial state
+  chrome.storage.sync.get({ autoFixEnabled: false }, ({ autoFixEnabled }) => {
+    toggle.checked = autoFixEnabled;
+  });
+
+  // When toggle changes
+  toggle.addEventListener('change', () => {
+  const enabled = toggle.checked;
+
+  chrome.storage.sync.get({ autoFixEnabled: false }, ({ autoFixEnabled }) => {
+    if (autoFixEnabled === enabled) return;
+
+    chrome.storage.sync.set({ autoFixEnabled: enabled }, () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) chrome.tabs.reload(tabs[0].id);
+      });
+    });
+  });
+});
+
+});
+
 
 function sendMessageAsync(tabId, msg) {
     return new Promise((resolve, reject) => {

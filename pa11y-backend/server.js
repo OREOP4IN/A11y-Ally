@@ -1,40 +1,60 @@
-require('dotenv').config();
+if (!process.env.K_SERVICE) {
+    require('dotenv').config();
+}
 
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-const app = express();
-const port = 3000;
+const crypto = require('crypto');
+const pa11y = require('pa11y');
 
 const vision = require('@google-cloud/vision');
 const { VertexAI } = require('@google-cloud/vertexai');
 
-// Configure from env or hardcode like your PHP config
-const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
-const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1'; // Gemini supported
-const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash'; // available & fast
+const app = express();
 
-// Vision preferences like your CI3 config
-const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
-const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
+// ✅ Cloud Run: must listen on process.env.PORT
+const port = process.env.PORT || 3000;
 
-// Instantiate clients (uses GOOGLE_APPLICATION_CREDENTIALS if set)
-const visionClient = new vision.ImageAnnotatorClient(); // {keyFilename: '...'} if you prefer inline
-
-const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
-const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-const crypto = require('crypto');
-
-// ---- Cache paths ----
-const CACHE_DIR = path.join(__dirname, 'cache');
+// ✅ Cloud Run: use temp dir (ephemeral) if you still want file cache
+const CACHE_DIR = process.env.CACHE_DIR || path.join('/tmp', 'cache');
 const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
 const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
 
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+
+// ✅ JSON body
+app.use(express.json({ limit: '50mb' }));
+
+// ✅ CORS (tighten this later)
+app.use(cors({
+  origin: true, // (dev-friendly) replace with a whitelist for prod
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-API-Key'],
+}));
+
+// ✅ Optional API key guard (recommended once public)
+app.use((req, res, next) => {
+  const required = process.env.EXT_API_KEY;
+  if (!required) return next(); // allow if not configured (dev)
+  const provided = req.get('x-api-key');
+  if (provided !== required) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+});
+
+// ---- Your existing env config ----
+const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
+const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1';
+const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash';
+
+const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
+const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
+
+// Clients
+const visionClient = new vision.ImageAnnotatorClient();
+const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
+const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
 
 // Safe load/save helpers
 function loadJson(p) {
@@ -213,7 +233,6 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-
 function escapeHtml(s) {
     return String(s)
         .replace(/&/g, '&amp;')
@@ -222,6 +241,15 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+function validateHttpUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, error: 'Only http/https URLs are allowed' };
+    return { ok: true, url: u.toString() };
+  } catch {
+    return { ok: false, error: 'Invalid URL' };
+  }
+}
 
 async function generateAltText(imageUrl) {
     console.log("test imageUrl:", imageUrl);
@@ -270,11 +298,11 @@ async function generateAltTextWithGemini(imageUrl) {
 
     const request = {
         contents: [{
-        role: 'user',
-        parts: [
-            { inlineData: { mimeType, data: buf.toString('base64') } },
-            { text: 'Write a concise, neutral ALT text (<=120 chars), no branding, no speculation.' }
-        ]
+            role: 'user',
+            parts: [
+                { inlineData: { mimeType, data: buf.toString('base64') } },
+                { text: 'Write a concise, neutral, indonesian ALT text (<=120 chars), no branding, no speculation' }
+            ]
         }],
         generationConfig: { maxOutputTokens: 64, temperature: 0.2 }
     };
@@ -290,9 +318,6 @@ async function generateAltTextWithGemini(imageUrl) {
     // Fallback if empty
     return text || 'Image';
 }
-
-app.use(cors());
-app.use(express.json({ limit: '50mb' })); // payload limit to handle large HTML strings
 
 // POST /alt-lookup  body: { srcs: ["https://...","https://..."] }
 app.post('/alt-lookup', (req, res) => {
@@ -340,7 +365,7 @@ app.post('/generate-alt-text', async (req, res) => {
             const MAX_LEN = 120;
             if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
 
-        // cache it but don’t fail the request if write has issues
+            // cache it but don’t fail the request if write has issues
             try {
                 altCache[key] = { imageUrl, altText: alt, ts: Date.now() };
                 saveJsonAtomic(ALT_CACHE_PATH, altCache);
@@ -408,7 +433,7 @@ app.post('/save-fixes', (req, res) => {
         clean.forEach(a => bySrc.set(a.src, a));
         fixesCache[url] = { ts: Date.now(), alts: Array.from(bySrc.values()), meta: { ...(prev.meta||{}), ...meta } };
         // console.log("fixesCache[url]:", fixesCache[url]);
-        // NEW: promote into the global alt cache so other pages can reuse
+        // promote into the global alt cache so other pages can reuse
         let touched = false;
         for (const a of clean) {
             const key = sha1(a.src);
@@ -431,71 +456,108 @@ app.post('/save-fixes', (req, res) => {
     }
 });
 
-app.post('/run-pa11y', (req, res) => {
-    // Expect 'url' in the body to run Pa11y on the live page
-    const { url } = req.body;
+app.post('/run-pa11y', async (req, res) => {
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ ok: false, error: 'URL is required' });
 
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required' });
+    const v = validateHttpUrl(url);
+    if (!v.ok) return res.status(400).json({ ok: false, error: v.error });
+
+    console.log(`Received URL for scanning: ${v.url}`);
+
+    const chromeArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process',
+        '--headless=new'
+    ];
+
+    try {
+        const results = await pa11y(v.url, {
+        standard: 'WCAG2AA',
+        timeout: 30000,
+        runners: ['htmlcs'],
+
+        // pa11y will launch Chrome/Puppeteer internally
+        chromeLaunchConfig: {
+            args: chromeArgs,
+
+            // Some pa11y builds support passing executablePath here.
+            // If it ignores it, it's harmless. If it supports it, great.
+            executablePath: process.env.CHROME_PATH || '/usr/bin/chromium'
+        }
+        });
+
+        // Optional: mimic pa11y-ci "level=error" (filter only errors)
+        // results.issues = (results.issues || []).filter(i => i.type === 'error');
+
+        return res.json({ ok: true, url: v.url, results });
+    } catch (e) {
+        console.error('pa11y error:', e);
+        return res.status(500).json({
+        ok: false,
+        error: 'Failed to run pa11y',
+        details: e.message
+        });
+    }
+});
+
+// DEBUG TOOLS OPEN TO PUBLIC FOR NOW BIAR TESTING GAMPANG
+
+app.get('/debug/fixes-cache', (req, res) => {
+  try {
+    if (!fs.existsSync(FIXES_CACHE_PATH)) {
+      return res.json({ exists: false });
     }
 
-    console.log(`Received URL for scanning: ${url}`);
-
-    // Pa11y config to scan the URL directly
-    const pa11yConfig = {
-        defaults: {
-            timeout: 30000,
-            standard: "WCAG2AA",
-            ignore: [],
-            level: "error",
-            puppeteerArgs: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-gpu",
-                "--headless",
-                "--disable-dev-shm-usage",
-                "--disable-software-rasterizer"
-            ],
-            chromeLaunchConfig: { args: ["--no-sandbox"] }
-        },
-        urls: [url]  // Use the URL directly for testing
-    };
-
-    const configPath = path.join(__dirname, 'temp_pa11yci.json');
-    fs.writeFileSync(configPath, JSON.stringify(pa11yConfig, null, 2));
-
-    const command = `npm run -s pa11y:run -- --config "${configPath}" --reporter json`;
-
-    console.log(`Running Pa11y with command: ${command}`);
-
-    exec(command, { cwd: __dirname, windowsHide: true, shell: true }, (error, stdout, stderr) => {
-        // Clean up the temp config file
-        fs.unlinkSync(configPath);
-
-        if (error && error.code !== 2) {
-            console.error(`Exec error: ${error}`);
-            return res.status(500).json({ error: 'Failed to run Pa11y', details: stderr });
-        }
-
-        try {
-            const report = JSON.parse(stdout);
-            const total = report.total;
-            const error = report.error;
-            const passes = report.passes;
-            if (total == 1 && error == null && passes == 0) {
-                const firstIssue = Object.values(report.results)[0][0];
-                console.log('First issue message:', firstIssue.message);
-                parseError = firstIssue.message;
-            }
-            console.log('Scan complete. Sending report to extension.');
-            res.json(report);
-        } catch (parseError) {
-            console.error('Failed to parse Pa11y output:', parseError);
-            res.status(500).json({ error: 'Failed to parse Pa11y output' });
-        }
+    const data = fs.readFileSync(FIXES_CACHE_PATH, 'utf8');
+    res.json({
+      exists: true,
+      size: data.length,
+      data: JSON.parse(data)
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/debug/alt-cache', (req, res) => {
+  try {
+    if (!fs.existsSync(ALT_CACHE_PATH)) {
+      return res.json({ exists: false });
+    }
+
+    const data = fs.readFileSync(ALT_CACHE_PATH, 'utf8');
+    res.json({
+      exists: true,
+      size: data.length,
+      data: JSON.parse(data)
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/debug/ls', (req, res) => {
+  try {
+    const base = '/usr/src/app';
+    const tmp = '/tmp';
+
+    res.json({
+      appDir: fs.readdirSync(base),
+      tmpDir: fs.existsSync(tmp) ? fs.readdirSync(tmp) : []
+    });
+
+    console.log('APP DIR:', fs.readdirSync('/usr/src/app'));
+    console.log('TMP DIR:', fs.readdirSync('/tmp'));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.listen(port, () => {
-    console.log(`Pa11y backend listening at http://localhost:${port}`);
+  console.log(`Pa11y backend listening on port ${port}`);
 });

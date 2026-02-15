@@ -1,9 +1,3 @@
-// const PA11Y_BACKEND_URL = process.env.PA11Y_BACKEND_URL;
-
-// if (!PA11Y_BACKEND_URL) {
-//   throw new Error('PA11Y_BACKEND_URL is not set');
-// }
-
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'ALT_LOOKUP') {
         (async () => {
@@ -29,17 +23,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return true;
     }
     if (msg.type === 'GENERATE_A11Y_CSS') {
-        console.log('Pa11y A11Y CSS Generation Triggered');
-        console.log('Received Pa11y Report:', msg.report);
-        
         const issues = Object.values(msg.report.results.issues);
-        console.log('Issues:', issues);
-
         const contrastFailures = extractContrastFailures(issues);
-        console.log('Contrast Failures:', contrastFailures);
-
         const generatedCSS = generateCSSForContrastFixes(contrastFailures);
-        console.log('Generated CSS:', generatedCSS);
         
         if (!generatedCSS) {
             sendResponse({ ok: true, message: 'No contrast issues found.' });
@@ -69,31 +55,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const prefer = msg.prefer;
                 const img = msg.img;
                 
-                console.log('masok gak?');
                 const ctrl = new AbortController();
-                console.log('ctrl', ctrl);
                 const to = setTimeout(()=>ctrl.abort('timeout'), requestTimeoutMs);
-                console.log('to', to);
                 const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/generate-alt-text', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageUrl: src, prefer }),
                     signal: ctrl.signal
                 });
-                // console.log("r", r);
-                // console.log("r.json():", r.json());
                 clearTimeout(to);
                 if (!resp.ok) throw new Error('HTTP '+resp.status);
-                // const j = await r.json();
                 const data = await resp.json();
 
-                console.log('GEN_ALT result:', data);
                 sendResponse({ ok: true, data });
-                
-                // if (j && j.altText) {
-                //     img.setAttribute('alt', j.altText);
-                //     applied.push({ src, alt: j.altText });
-                // }
+
             } catch (err) {
                 console.warn('ALT gen failed', src, err);
             }
@@ -107,7 +82,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const alts = msg.alts;
             const meta = msg.meta;
             const location = msg.location;
-            console.log('locationhref111111', location);
             const resp = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/save-fixes', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -115,7 +89,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             });
 
             const data = await resp.json();
-            console.log('savePageFixes success', data);
             sendResponse({ ok: true, data });
         } catch (err) {
             sendResponse({ ok: false, error: err.message });
@@ -213,12 +186,9 @@ function generateCSSForContrastFixes(contrastFailures) {
     contrastFailures.forEach(({ selector, fgColor, bgColor }) => {
         // If no foreground color is provided, use the background color as fallback
         const fixedFgColor = fgColor ? fgColor : bgColor;
-        console.log('masuk gen');
 
         // Use `pickColor` to find the most readable color
         const finalColor = pickColor(bgColor, fgColor);
-        console.log('finalColor', finalColor);
-
 
         css += `
             ${selector} {
@@ -234,9 +204,6 @@ function generateCSSForContrastFixes(contrastFailures) {
 
 // Convert Hex to RGB
 function hexToRgb(hex) {
-    // Log the received hex value
-    console.log('hex:', hex);
-
     // Return a default color (black) if the hex is invalid
     if (!hex || typeof hex !== 'string' || !/^#?[0-9A-Fa-f]{3,6}$/i.test(hex)) {
         console.warn('Invalid hex color, returning black');
@@ -256,16 +223,11 @@ function hexToRgb(hex) {
     const g = parseInt(hex.slice(2, 4), 16);
     const b = parseInt(hex.slice(4, 6), 16);
 
-    // Log the RGB values for debugging
-    console.log('r, g, b:', r, g, b);
-
     return { r, g, b };
 }
 
 // Calculate relative luminance for contrast ratio
 function relLuminance(rgb) {
-    // console.log('relLuminance')
-    // console.log('rgb', rgb);
     const toLin = (c) => {
         c = c / 255;
         return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -275,9 +237,6 @@ function relLuminance(rgb) {
 
 // Calculate contrast ratio between two colors
 function contrastRatio(fg, bg) {
-    // console.log('contrastRatio')
-    // console.log('fg', fg);
-    // console.log('bg', bg);
     const L1 = relLuminance(fg) + 0.05;
     const L2 = relLuminance(bg) + 0.05;
     return (Math.max(L1, L2)) / (Math.min(L1, L2));
@@ -294,7 +253,6 @@ function mixRgb(a, b, t) {
 
 // Nudge color toward white/black until contrast passes
 function nudgeToward(fg, bg, toWhite, target) {
-    console.log('masok nufge');
     const goal = toWhite ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 };
     for (let i = 0; i <= 100; i++) {
         const t = i / 100.0; // 0..1
@@ -310,8 +268,6 @@ function nudgeToward(fg, bg, toWhite, target) {
 function pickColor(bgHex, fgHex = null) {
     const bg = hexToRgb(bgHex);
     let fg = fgHex ? hexToRgb(fgHex) : null;
-    console.log('bg', bg);
-    console.log('fg', fg)
     const black = { r: 0, g: 0, b: 0 };
     const white = { r: 255, g: 255, b: 255 };
     const gray = { r: 122, g: 122, b: 122 };
@@ -331,9 +287,6 @@ function pickColor(bgHex, fgHex = null) {
     // Try nudging toward white or black if the contrast ratio dont work
     const towardWhite = nudgeToward(fg, bg, true, 4.5);
     const towardBlack = nudgeToward(fg, bg, false, 4.5);
-    console.log('towardWhite', towardWhite);
-    console.log('towardBlack', towardBlack);
-
 
     if (towardWhite && towardBlack) {
         return towardWhite.t <= towardBlack.t

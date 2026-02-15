@@ -1,32 +1,66 @@
 <!doctype html>
-<html>
+<html lang="id">
   <head>
     <meta charset="utf-8" />
-    <title>Pa11y Helper</title>
+    <title>A11y-Ally Helper</title>
     <style>
       body {
-        font-family: system-ui, Arial, sans-serif;
-        margin: 12px;
-        width: 260px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 16px;
+        width: 280px;
+        color: #333;
+        background-color: #f9f9f9;
       }
+
+      h2 {
+        margin: 0 0 16px 0;
+        font-size: 18px;
+        color: #2563eb; /* Blue primary */
+        text-align: center;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 8px;
+      }
+
+      .section {
+        margin-bottom: 16px;
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+
       .row {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 12px;
       }
-      .hint {
-        margin-top: 8px;
-        font-size: 12px;
-        opacity: 0.75;
+
+      .label-group {
+        display: flex;
+        flex-direction: column;
       }
 
-      /* simple switch */
+      .label-title {
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      .hint {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #6b7280;
+        line-height: 1.2;
+      }
+
+      /* --- TOGGLE SWITCH CSS --- */
       .switch {
         position: relative;
         display: inline-block;
         width: 44px;
         height: 24px;
+        flex-shrink: 0; /* Prevent squishing */
       }
       .switch input {
         opacity: 0;
@@ -37,9 +71,9 @@
         position: absolute;
         cursor: pointer;
         inset: 0;
-        background-color: #ccc;
-        transition: 0.2s;
-        border-radius: 999px;
+        background-color: #cbd5e1; /* Grey when off */
+        transition: 0.3s;
+        border-radius: 99px;
       }
       .slider:before {
         position: absolute;
@@ -47,30 +81,216 @@
         height: 18px;
         width: 18px;
         left: 3px;
-        top: 3px;
+        bottom: 3px;
         background-color: white;
-        transition: 0.2s;
+        transition: 0.3s;
         border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
       }
       input:checked + .slider {
-        background-color: #22c55e;
+        background-color: #22c55e; /* Green when on */
       }
       input:checked + .slider:before {
         transform: translateX(20px);
       }
+
+      /* --- BUTTON CSS --- */
+      .btn-primary {
+        width: 100%;
+        background-color: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 6px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn-primary:hover {
+        background-color: #1d4ed8;
+      }
+      .btn-primary:active {
+        transform: scale(0.98);
+      }
+      .grid-tools {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 Kolom */
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .tool-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        padding: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+      }
+
+      /* Style saat aktif */
+      .tool-card.active {
+        background-color: #eff6ff;
+        border-color: #2563eb;
+        color: #2563eb;
+      }
+      
+      .tool-icon {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
+
+      .tool-label {
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      /* --- AUDIT BOX CSS --- */
+      .audit-box {
+        margin-top: 12px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 8px;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .audit-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 600;
+        margin-bottom: 4px;
+        color: #4b5563;
+      }
+
+      #audit-output {
+        width: 100%;
+        height: 100px; /* Tinggi kotak */
+        box-sizing: border-box; /* Agar padding tidak melebar keluar */
+        border: 1px solid #d1d5db;
+        border-radius: 4px;
+        background-color: #f8fafc;
+        font-family: monospace; /* Font koding agar rapi */
+        font-size: 10px;
+        padding: 8px;
+        resize: vertical; /* User bisa tarik tinggi-rendah */
+        color: #334155;
+      }
+
+      #audit-output:focus {
+        outline: 2px solid #2563eb;
+        border-color: transparent;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
     </style>
   </head>
   <body>
-    <div class="row">
-      <div>
-        <div style="font-weight:600;">Auto Fix</div>
-        <div class="hint">Generate/apply alt text automatically</div>
+    <h2>A11y-Ally</h2>
+
+    <div class="section">
+    <div class="label-group">
+      <span class="label-title">Visual Aids</span>
+    </div>
+    
+    <div class="grid-tools">
+      <div class="tool-card" id="btnReadingMask">
+        <span class="tool-icon">📏</span>
+        <span class="tool-label">Reading Mask</span>
       </div>
 
-      <label class="switch" title="Toggle Auto Fix">
-        <input id="autoFixToggle" type="checkbox" />
-        <span class="slider"></span>
-      </label>
+      <div class="tool-card" id="btnStopAnim">
+        <span class="tool-icon">⏸️</span>
+        <span class="tool-label">Stop Anim</span>
+      </div>
+
+      <div class="tool-card" id="btnLinks">
+        <span class="tool-icon">🔗</span>
+        <span class="tool-label">Links</span>
+      </div>
+      
+      <div class="tool-card" id="btnSpacing">
+        <span class="tool-icon">↔️</span>
+        <span class="tool-label">Spacing</span>
+      </div>
+
+      <div class="tool-card" id="btnCursor">
+        <span class="tool-icon">👆</span>
+        <span class="tool-label">Big Cursor</span>
+      </div>
+
+      <div class="tool-card" id="btnTTS">
+        <span class="tool-icon">🔊</span>
+        <span class="tool-label">Read Text</span>
+      </div>
+    </div>
+</div>
+
+    <div class="section">
+      <div class="row">
+        <div class="label-group">
+          <span class="label-title">Auto Remediation</span>
+          <span class="hint">Fix contrast & Alt Text</span>
+        </div>
+        
+        <label class="switch" title="Toggle Auto Fix">
+          <input id="autoFixToggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="row">
+        <div class="label-group">
+          <span class="label-title">Dyslexia Font</span>
+          <span class="hint">Use OpenDyslexic font</span>
+        </div>
+        
+        <label class="switch" title="Toggle Dyslexia Font">
+          <input id="dyslexiaToggle" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section" style="margin-bottom: 0;">
+      <div class="label-group" style="margin-bottom: 8px;">
+        <span class="label-title">Diagnostics</span>
+        <span class="hint">Run Pa11y audit manually</span>
+      </div>
+      
+      <button id="scan-button" class="btn-primary" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+        </svg>
+        Run HTML Audit
+      </button>
+      
+      <div id="audit-container" class="audit-box hidden">
+        <div class="audit-header">
+          <span>Audit Log:</span>
+          <span id="close-audit" style="cursor:pointer; color:#ef4444;">&times; Close</span>
+        </div>
+        <textarea id="audit-output" readonly placeholder="Waiting for scan results..."></textarea>
+      </div>
+      <!-- <div id="results" style="margin-top:8px; font-size:11px; color:#666;"></div> -->
     </div>
 
     <script src="popup.js"></script>

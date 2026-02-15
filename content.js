@@ -1,12 +1,3 @@
-// File: content.js
-// const mode = await runPromisify('ENV_MODE');
-// console.log(mode);
-// function logDev() {
-//   if (mode == 'development') {
-//     console.log(...arguments);
-//   } 
-// }
-
 const SETTINGS_KEY = 'autoFixEnabled';
 
 async function isAutoFixEnabled() {
@@ -56,9 +47,7 @@ function promisify(type, data = {}) {
 
 async function runPromisify(title, payload = {}) {
   try {
-    console.log(`we runnin ${title}`);
     const result = await promisify(title, payload);
-    console.log(`${title} result:`, result);
     return { data: result.data, ok: result.ok };
   } catch (err) {
     console.error(`${title} error:`, err);
@@ -74,13 +63,12 @@ async function initAutoFix() {
 
   try {
     const enabled = await isAutoFixEnabled();
-    console.log('autofix:', enabled);
-
     if (!enabled) return;
+    console.log('cek stat', enabled);
 
     // optional: give the page a microtask/tick to settle
     await new Promise((r) => setTimeout(r, 0));
-
+    console.log('timeout?', enabled);
     await runManualFixes(); // make runManualFixes async if it isn't
   } catch (err) {
     console.error('initAutoFix error:', err);
@@ -97,69 +85,138 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 
 function runManualFixes() {
   let successfulRuns = {
-    "runGeneralFixes": 0,
-    "generateAltImages": 0,
-    "savePageFixes": 0,
-    "pa11yResult": 0,
-    "GENERATE_A11Y_CSS": 0,
-  }
-  console.log('masuk async run (content.js)');
+    "runGeneralFixes": false,
+    "generateAltImages": false,
+    "savePageFixes": false,
+    "pa11yResult": false,
+    "GENERATE_A11Y_CSS": false,
+  };
+
+  // use IIFE async biar bisa pake await
   (async () => {
     try {
+      // 1. URL validation
+      const url = window.location.href;
+      const disallowed = /^(chrome|edge|about|chrome-extension|file):\/\//i;
+
+      if (disallowed.test(url)) {
+        console.error('❌ This page type cannot be scanned. Open a normal http(s) page.');
+        return; 
+      } else {
+        console.log('🔍 Scanning URL:', url);
+      }
+
+      // 2. JALANIN GENERAL FIXES
       const data = await runGeneralFixes();
       const applied = data?.applied;
       
-      successfulRuns.runGeneralFixes = data.ok;
-      successfulRuns.generateAltImages = data.ok;
-      console.log('check results applied', data);
+      if (data && data.ok) {
+        successfulRuns.runGeneralFixes = true;
+        successfulRuns.generateAltImages = true;
+      }
 
-      if (data?.applied?.length) {
+      // 3. SIMPEN FIXES KE SERVER
+      if (applied && applied.length > 0) {
         try {
           const resp = await savePageFixes(applied, { source: 'auto', count: applied.length });
-          console.log('savepagefixes data', resp);
           successfulRuns.savePageFixes = resp.ok;
         } catch (e) {
-          console.warn('auto savePageFixes failed (post-reply):', e);
+          console.warn('⚠️ auto savePageFixes failed:', e);
         }
       }
 
-      const url = window.location.href;
-      const disallowed = /^(chrome|edge|about|chrome-extension):\/\//i;
-
-      if (disallowed.test(url)) {
-        console.error('This page type cannot be scanned. Open a normal http(s) page.');
-      } else {
-        console.log('Scanning URL:', url);
-      }
-
+      // 4. JALANIN PA11Y
       const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
       const pa11yReport = pa11yResult.data;
-
+      
       successfulRuns.pa11yResult = pa11yResult.ok;
 
-      console.log('pa11yResult:', pa11yResult);
-      console.log('pa11yResult:', JSON.stringify(pa11yResult.data));
-
       if (!pa11yResult.ok) {
-        const t = JSON.stringify(pa11yReport);
-        throw new Error(`Server ${pa11yResult.status}. ${t || ''}`.trim());
+        throw new Error(`Server Pa11y Error: ${JSON.stringify(pa11yReport)}`);
       }
-      
-      chrome.runtime.sendMessage({
-        type: 'GENERATE_A11Y_CSS',
-        report: pa11yReport
-      }, (response) => {
-        console.log('ni response', response);
-        successfulRuns.GENERATE_A11Y_CSS = response.ok;
+
+      console.log('✅ Pa11y Report Received:', pa11yReport);
+
+      // 5. GENERATE & INJECT CSS (Wrapped in Promise)
+      // bungkus sendMessage biar bisa pake await n log terakhir jadi akurat
+      await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: 'GENERATE_A11Y_CSS',
+          report: pa11yReport
+        }, (response) => {
+          // Cek error runtime chrome
+          if (chrome.runtime.lastError) {
+             console.warn("CSS Gen Error:", chrome.runtime.lastError);
+             successfulRuns.GENERATE_A11Y_CSS = false;
+          } else {
+             successfulRuns.GENERATE_A11Y_CSS = response && response.ok;
+          }
+          resolve(); // Lanjut setelah response diterima
+        });
       });
+
     } catch (e) {
-      console.error('runGeneralFixes failed:', e);
+      console.error('❌ runManualFixes failed:', e);
+    } finally {
+      // 6. LOGGING HASIL AKHIR dah pasti dieksekusi terakhir
+      console.table(successfulRuns); // console.table biar rapi
     }
-    console.log('check runs', successfulRuns);
   })();
 
   return true;
 }
+
+// --- DYSLEXIA FONT MODULE ---
+
+function toggleDyslexiaFont(enable) {
+  const STYLE_ID = 'a11y-dyslexia-style';
+  let styleTag = document.getElementById(STYLE_ID);
+
+  if (enable) {
+    if (!styleTag) {
+      // 1. Dapatkan URL font internal ekstensi
+      const fontUrl = chrome.runtime.getURL('fonts/OpenDyslexic-Regular.woff2');
+      
+      // 2. Buat aturan CSS yang memaksa font
+      const css = `
+        @font-face {
+          font-family: 'OpenDyslexic';
+          src: url('${fontUrl}') format('woff2'); /* Sesuaikan format jika pakai .otf */
+          font-weight: normal;
+          font-style: normal;
+        }
+
+        /* Targetkan SEMUA elemen dengan !important */
+        :not(.fa):not([class*="icon"]):not(i) {
+          font-family: 'OpenDyslexic', sans-serif !important;
+          line-height: 1.5 !important;
+          letter-spacing: 0.05em !important;
+        }
+      `;
+
+      styleTag = document.createElement('style');
+      styleTag.id = STYLE_ID;
+      styleTag.textContent = css;
+      document.head.appendChild(styleTag);
+    }
+  } else {
+    // Jika dimatikan, hapus tag style
+    if (styleTag) styleTag.remove();
+  }
+}
+
+// Listener untuk menerima perintah dari Popup/Background
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'TOGGLE_DYSLEXIA_FONT') {
+    toggleDyslexiaFont(request.enabled);
+    sendResponse({ ok: true });
+  }
+});
+
+// Pengecekan awal saat load (opsional, jika Anda menyimpan state-nya)
+chrome.storage.sync.get({ dyslexiaFontEnabled: false }, (data) => {
+  if (data.dyslexiaFontEnabled) toggleDyslexiaFont(true);
+});
 
 // NOTES: keknya kudu di-optimasi; beda2 metode soalnya
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -198,26 +255,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // NOTES: ini klo terima request dari popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'GENERATE_A11Y_CSS') {
-    console.log('masok content script')
     const pa11yReport = request.report;
-    console.log('report konten sayang:', pa11yReport);
     chrome.runtime.sendMessage({
       type: 'GENERATE_A11Y_CSS',
       report: pa11yReport
     }, (response) => {
       console.log(response);
     });
-    // chrome.runtime.sendMessage({  // Ran twice incase ada yg kelewatan gak terlalu optimal idk tho
-    //   type: 'GENERATE_A11Y_CSS',
-    //   report: pa11yReport
-    // }, (response) => {
-    //   console.log(response.message);
-    // });
   }
 });
 
 async function runGeneralFixes() {
-  console.log('masuk runGeneralFixes');
   // === general fixes ===
   document.querySelectorAll('[align]').forEach(el => {
     const alignValue = el.getAttribute('align');
@@ -295,7 +343,6 @@ async function runGeneralFixes() {
 
     function fixContainer(container) {
       if (container.hasAttribute(MARK)) return;
-      // console.log('container', container);
 
       const button =
         container.querySelector('.menu-list--btn') ||
@@ -305,10 +352,7 @@ async function runGeneralFixes() {
         container.querySelector('.menu-list--dropdown-content') ||
         container.querySelector('div');
 
-      // console.log('button n panel', button, panel);
       if (!button || !panel) return;
-      // console.log('panel', panel);
-      // console.log('panelquery', panel.querySelector('a[href]'));
       if (!panel.querySelector('a[href]')) return; // must have links
 
       // ensure IDs on container, button, panel
@@ -316,7 +360,6 @@ async function runGeneralFixes() {
       const containerId = ensureId(container, `${base}Wrap`);
       const btnId = ensureId(button, `${base}Btn`);
       const panelId = ensureId(panel, `${base}Dropdown`);
-      // console.log("btnid", btnId);
 
       // ARIA wiring
       if (!button.hasAttribute('aria-haspopup'))
@@ -361,7 +404,6 @@ async function runGeneralFixes() {
     }
 
     function applyDropdownA11y(root = document) {
-      // console.log(root.querySelectorAll('.menu-list--btn'));
       root.querySelectorAll('.main-nav--menu-list.menu-list--dropdown, .menu-list--dropdown, .menu-list--btn')
         .forEach(fixContainer);
 
@@ -375,7 +417,6 @@ async function runGeneralFixes() {
     }
 
     function injectDynamicDropdownCSS(list) {
-      // console.log('list', list);
       if (!list.length) return;
       let css = '';
 
@@ -456,22 +497,6 @@ async function runGeneralFixes() {
     }
     style.textContent = keyboardNavBorderCSS;
 
-    // NOTES: JS safeguard mark elements that already have borders so CSS doesn't override
-    /* //NOTES: malah ganggu img jadi gede beut kgk bisa di-overflowin
-    const focusableSelectors = [
-      'button', 'a[href]', 'input', 'select', 'textarea', '[tabindex]'
-    ];
-    const focusables = document.querySelectorAll(focusableSelectors.join(','));
-
-    focusables.forEach(el => {
-      const cs = window.getComputedStyle(el);
-      const borderWidth = parseFloat(cs.borderWidth || 0);
-      const outlineWidth = parseFloat(cs.outlineWidth || 0);
-      if (borderWidth > 0 || outlineWidth > 0) {
-        el.setAttribute('data-has-border', 'true');
-      }
-    }); */
-
   console.log('✅ Fallback keyboard navigation borders injected.');
   })();
 
@@ -482,14 +507,9 @@ async function runGeneralFixes() {
 }
 
 async function generateAltForImages({ prefer = 'gemini', concurrency = 5, requestTimeoutMs = 15000 } = {}) {
-  console.log('run gen alt');
-
   // collect targets (no existing alt)
   const imgs = [...document.querySelectorAll('img')].filter((img) => !img.getAttribute('alt')?.trim());
   if (!imgs.length) return { applied: [], ok: true };
-
-  console.log('imgs', imgs);
-
 
   // de-duplicate srcs to avoid repeated calls
   const uniqueSrcs = [...new Set(imgs.map((i) => i.src).filter(Boolean))];
@@ -577,23 +597,17 @@ async function generateAltForImages({ prefer = 'gemini', concurrency = 5, reques
   const workerCount = Math.max(1, Math.min(concurrency, nonSvgImgs.length));
   await Promise.all(Array.from({ length: workerCount }, worker));
 
-  console.log('applied', applied);
-
-  // Optional: If you want ok=true ONLY when every target img got an alt
-  // (uncomment the next line and remove the "ok" mutations above if you prefer)
-  // ok = imgs.every(img => img.getAttribute('alt')?.trim());
   return { applied, ok };
 }
 
 async function lookupCachedAlts(srcs) {
   try {
-    const r = await fetch('http://localhost:3000/alt-lookup', {
+    const r = await fetch('https://pa11y-backend-tisgwzdora-et.a.run.app/alt-lookup', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ srcs })
     });
-    // console.log("r:", r);
-    // console.log("r.json():", r.json());
+    
     if (!r.ok) return { hits: [], misses: srcs };
     return await r.json(); // { hits:[{src,alt}], misses:[...] }
   } catch (e) {
@@ -604,12 +618,10 @@ async function lookupCachedAlts(srcs) {
 
 async function fetchPageFixes() {
     try {
-        const url = new URL('http://localhost:3000/fixes');
+        const url = new URL('https://pa11y-backend-tisgwzdora-et.a.run.app/fixes');
         url.searchParams.set('url', location.href);
         const r = await fetch(url.toString(), { method: 'GET' });
         
-        // console.log("r:", r);
-        // console.log("r.json():", r.json());
         if (!r.ok) return null;
         return await r.json();
     } catch (e) {
@@ -628,7 +640,6 @@ async function savePageFixes(alts, meta = {}) {
       location: locationhref
     });
 
-    console.log('SAVE_FIXES result:', resp.data);
     return { ok: true, data: resp.data };
 
   } catch (err) {
@@ -636,3 +647,238 @@ async function savePageFixes(alts, meta = {}) {
     return { ok: false, error: err.message };
   }
 }
+
+// --- FITUR TAMBAHAN: READING MASK, ANIMATION, LINKS ---
+
+// 1. Reading Mask Logic
+let maskOverlay = null;
+// --- 1. Reading Mask Logic (REVISI: 2-Div System) ---
+let maskTop = null;
+let maskBottom = null;
+const MASK_GAP = 100; // Lebar celah baca (dalam pixel)
+
+function toggleReadingMask(enable) {
+  if (enable) {
+    if (!maskTop) {
+      // Buat Kotak Atas (Gelap)
+      maskTop = document.createElement('div');
+      maskTop.id = 'a11y-mask-top';
+      maskTop.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; 
+        background: rgba(0,0,0,0.6); 
+        z-index: 2147483647; pointer-events: none;
+        transition: height 0.05s linear; /* Sedikit transisi agar halus */
+      `;
+
+      // Buat Kotak Bawah (Gelap)
+      maskBottom = document.createElement('div');
+      maskBottom.id = 'a11y-mask-bottom';
+      maskBottom.style.cssText = `
+        position: fixed; bottom: 0; left: 0; width: 100%; 
+        background: rgba(0,0,0,0.6); 
+        z-index: 2147483647; pointer-events: none;
+        transition: height 0.05s linear;
+      `;
+      
+      // Buat Garis Fokus (Opsional: Garis merah tipis di tengah)
+      // Agar user tau persis tengahnya dimana
+      maskTop.style.borderBottom = "2px solid rgba(255, 255, 0, 0.5)"; // Garis kuning transparan
+      
+      document.body.appendChild(maskTop);
+      document.body.appendChild(maskBottom);
+      
+      document.addEventListener('mousemove', moveMask);
+    }
+  } else {
+    // Hapus elemen jika dimatikan
+    if (maskTop) {
+      maskTop.remove(); maskTop = null;
+    }
+    if (maskBottom) {
+      maskBottom.remove(); maskBottom = null;
+    }
+    document.removeEventListener('mousemove', moveMask);
+  }
+}
+
+function moveMask(e) {
+  if (maskTop && maskBottom) {
+    const y = e.clientY;
+    
+    // Logika Matematika Sederhana:
+    // Tinggi kotak atas = Posisi Mouse - Setengah Celah
+    // Tinggi kotak bawah = Sisa layar di bawah
+    
+    const topHeight = Math.max(0, y - (MASK_GAP / 2));
+    const bottomHeight = Math.max(0, window.innerHeight - (y + (MASK_GAP / 2)));
+
+    maskTop.style.height = `${topHeight}px`;
+    maskBottom.style.height = `${bottomHeight}px`;
+  }
+}
+
+// 2. Stop Animations Logic
+function toggleStopAnimations(enable) {
+  const ID = 'a11y-stop-anim';
+  if (enable) {
+    if (!document.getElementById(ID)) {
+      const style = document.createElement('style');
+      style.id = ID;
+      style.textContent = `
+        *, *::before, *::after {
+          animation: none !important;
+          transition: none !important;
+          scroll-behavior: auto !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  } else {
+    const style = document.getElementById(ID);
+    if (style) style.remove();
+  }
+}
+
+// 3. Highlight Links Logic
+function toggleHighlightLinks(enable) {
+  const ID = 'a11y-highlight-links';
+  if (enable) {
+    if (!document.getElementById(ID)) {
+      const style = document.createElement('style');
+      style.id = ID;
+      style.textContent = `
+        a, button, [role="button"], [role="link"] {
+          background-color: #ffff00 !important; /* Kuning stabilo */
+          color: #000000 !important;
+          border: 2px solid #000000 !important;
+          text-decoration: underline !important;
+          font-weight: bold !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  } else {
+    const style = document.getElementById(ID);
+    if (style) style.remove();
+  }
+}
+
+// --- FITUR TAMBAHAN PART 2: SPACING, CURSOR, TTS ---
+
+// 1. Text Spacing Logic (WCAG 1.4.12)
+function toggleTextSpacing(enable) {
+  const ID = 'a11y-text-spacing';
+  if (enable) {
+    if (!document.getElementById(ID)) {
+      const style = document.createElement('style');
+      style.id = ID;
+      // !important untuk menimpa style bawaan
+      style.textContent = `
+        * {
+          line-height: 1.5 !important;
+          letter-spacing: 0.12em !important;
+          word-spacing: 0.16em !important;
+        }
+        p, li, h1, h2, h3, h4, h5, h6 {
+          margin-bottom: 2em !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  } else {
+    const style = document.getElementById(ID);
+    if (style) style.remove();
+  }
+}
+
+// 2. Big Cursor Logic
+function toggleBigCursor(enable) {
+  const ID = 'a11y-big-cursor';
+  if (enable) {
+    if (!document.getElementById(ID)) {
+      // SVG Kursor Besar (Encoded Base64 biar rapi)
+      // Gambar panah hitam dengan outline putih tebal
+      const cursorSVG = `url('data:image/svg+xml;utf8,<svg width="48" height="48" viewBox="0 0 24 24" fill="black" stroke="white" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.8c.45 0 .67-.54.35-.85L6.35 2.85a.5.5 0 0 0-.85.36z"/></svg>') 0 0, auto`;
+      
+      const style = document.createElement('style');
+      style.id = ID;
+      style.textContent = `
+        html, body, a, button, input, select, textarea, [role="button"] {
+          cursor: ${cursorSVG} !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  } else {
+    const style = document.getElementById(ID);
+    if (style) style.remove();
+  }
+}
+
+// 3. Text-to-Speech (TTS) Logic
+// Variabel global untuk TTS
+let ttsEnabled = false;
+
+// Fungsi pembaca seleksi
+function handleMouseUpTTS() {
+  if (!ttsEnabled) return;
+  
+  const selectedText = window.getSelection().toString().trim();
+  if (selectedText.length > 0) {
+    // Stop suara sebelumnya (biar gak numpuk)
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(selectedText);
+    utterance.lang = 'id-ID'; // Bahasa Indonesia
+    utterance.rate = 1.0; // Kecepatan normal
+    utterance.pitch = 1.0;
+    
+    window.speechSynthesis.speak(utterance);
+  }
+}
+
+function toggleTTS(enable) {
+  ttsEnabled = enable;
+  if (enable) {
+    document.addEventListener('mouseup', handleMouseUpTTS);
+  } else {
+    document.removeEventListener('mouseup', handleMouseUpTTS);
+    window.speechSynthesis.cancel(); // Matikan suara saat fitur dimatikan
+  }
+}
+
+// Update Message Listener
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'TOGGLE_TEXT_SPACING') toggleTextSpacing(request.enabled);
+  if (request.type === 'TOGGLE_BIG_CURSOR') toggleBigCursor(request.enabled);
+  if (request.type === 'TOGGLE_TTS') toggleTTS(request.enabled);
+});
+
+// Cek State Awal
+chrome.storage.sync.get({ 
+  textSpacingEnabled: false,
+  bigCursorEnabled: false,
+  ttsEnabled: false
+}, (data) => {
+  if (data.textSpacingEnabled) toggleTextSpacing(true);
+  if (data.bigCursorEnabled) toggleBigCursor(true);
+  if (data.ttsEnabled) toggleTTS(true);
+});
+
+// Update Message Listener
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'TOGGLE_READING_MASK') toggleReadingMask(request.enabled);
+  if (request.type === 'TOGGLE_STOP_ANIMATION') toggleStopAnimations(request.enabled);
+  if (request.type === 'TOGGLE_HIGHLIGHT_LINKS') toggleHighlightLinks(request.enabled);
+});
+
+// Cek State Awal (Load settings)
+chrome.storage.sync.get({ 
+  readingMaskEnabled: false,
+  stopAnimationEnabled: false,
+  highlightLinksEnabled: false
+}, (data) => {
+  if (data.readingMaskEnabled) toggleReadingMask(true);
+  if (data.stopAnimationEnabled) toggleStopAnimations(true);
+  if (data.highlightLinksEnabled) toggleHighlightLinks(true);
+});

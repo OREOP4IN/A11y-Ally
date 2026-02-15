@@ -14,27 +14,27 @@ const { VertexAI } = require('@google-cloud/vertexai');
 
 const app = express();
 
-// ✅ Cloud Run: must listen on process.env.PORT
+//  Cloud Run: must listen on process.env.PORT
 const port = process.env.PORT || 3000;
 
-// ✅ Cloud Run: use temp dir (ephemeral) if you still want file cache
+//  Cloud Run: use temp dir (ephemeral) if you still want file cache
 const CACHE_DIR = process.env.CACHE_DIR || path.join('/tmp', 'cache');
 const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
 const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
 
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
-// ✅ JSON body
+//  JSON body
 app.use(express.json({ limit: '50mb' }));
 
-// ✅ CORS (tighten this later)
+//  CORS (tighten this later)
 app.use(cors({
   origin: true, // (dev-friendly) replace with a whitelist for prod
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'X-API-Key'],
 }));
 
-// ✅ Optional API key guard (recommended once public)
+//  Optional API key guard (recommended once public)
 app.use((req, res, next) => {
   const required = process.env.EXT_API_KEY;
   if (!required) return next(); // allow if not configured (dev)
@@ -113,14 +113,6 @@ function sanitizeForPa11y(html, opts = {}) {
     removeComments,       // NEW
     collapseWhitespace    // NEW
   } = opts;
-  console.log('rm scripts', removeScripts);
-  console.log('rm seh', stripEventHandlers);
-  console.log('rm ni', neutralizeIframes);
-  console.log('rm ex', dropExternalStyles);
-  console.log('rm csp', addCSP);
-  console.log('rm cmt', removeComments);
-  console.log('rm clp', collapseWhitespace);
-
 
   let out = html;
 
@@ -154,16 +146,6 @@ function sanitizeForPa11y(html, opts = {}) {
   }
 
   // Neutralize iframes (keep layout but stop network)
-  // NOTES: check lagi keknya ada error soalnya klo di apply gen fix malah nambah 1 error ini:
-                // "code": "WCAG2AA.Principle2.Guideline2_4.2_4_1.H64.1",
-                // "type": "error",
-                // "typeCode": 1,
-                // "message": "Iframe element requires a non-empty title attribute that identifies the frame.",
-                // "context": "<iframe class=\"adsbox ads ad adsbox doubleclick ad-placement carbon-ads\" src=\"https://safeframe.googlesyndication.com/safeframe/1-0-40/html\" style=\"position: absolute; visibility: hidden; z-index: -9999;\">&nbsp;</iframe>",
-                // "selector": "html > body > iframe",
-                // "runner": "htmlcs",
-                // "runnerExtras": {}
-    // NOTES: gajadi udah ilang lagi wtf
   if (neutralizeIframes) {
     out = out.replace(
       /<iframe\b([^>]*)>([\s\S]*?)<\/iframe>/gi,
@@ -252,13 +234,9 @@ function validateHttpUrl(url) {
 }
 
 async function generateAltText(imageUrl) {
-    console.log("test imageUrl:", imageUrl);
     const [result] = await visionClient.labelDetection(imageUrl);
-    console.log("result:", result);
     const labels = result.labelAnnotations;
     const altText = labels.map(label => label.description).join(", ");
-    console.log("labels:", labels);
-    console.log("altText:", altText);
     return altText;
 }
 
@@ -277,24 +255,15 @@ async function generateAltTextWithVision(imageUrl) {
 // Gemini multimodal caption (short, a11y-friendly)
 async function generateAltTextWithGemini(imageUrl) {
     const resp = await fetch(imageUrl);
-    console.log("resp:", resp);
 
     if (!resp.ok) throw new Error(`Fetch image failed: ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
-    console.log("buf:", buf);
 
     // Guess mime (simple)
     let mimeType = 'image/jpeg';
     const u = imageUrl.toLowerCase();
     if (u.endsWith('.png')) mimeType = 'image/png';
     if (u.endsWith('.webp')) mimeType = 'image/webp';
-    // console.log("mimeType:", mimeType);
-    // console.log('[AUTH]', {
-    //     GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    //     project: process.env.GEMINI_PROJECT_ID,
-    //     location: process.env.GEMINI_LOCATION,
-    //     model: process.env.GEMINI_MODEL
-    // });
 
     const request = {
         contents: [{
@@ -308,13 +277,8 @@ async function generateAltTextWithGemini(imageUrl) {
     };
 
     const result = await generativeModel.generateContent(request);
-    console.log("result:", result);
-    console.log("test");
     const out = await result.response;
-    console.log("result.response:", result.response);
-    console.log("out:", out);
     const text = out.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    console.log("text:", text);
     // Fallback if empty
     return text || 'Image';
 }
@@ -340,27 +304,19 @@ app.post('/alt-lookup', (req, res) => {
 });
 
 app.post('/generate-alt-text', async (req, res) => {
-    console.log("masukin", req.body);
     const { imageUrl, prefer = 'gemini' } = req.body || {};
-    console.log("imageUrl", imageUrl);
     if (!imageUrl) return res.status(400).json({ error: 'Image URL is required' });
-    console.log("prefer", prefer);
 
     try {
         // Cache hit first
         const key = sha1(imageUrl);
         const hit = altCache?.[key];
-        console.log('check masok gen alt');
         if (hit?.altText) {
-            console.log("hit", hit);
-            console.log("hit alttext", hit.altText);
             return res.json({ altText: hit.altText, cached: true });
         }
-        console.log("issvg", isSvgUrl(imageUrl));
 
         // SVG fast path (no network/AI)
         if (isSvgUrl(imageUrl)) {
-            console.log("svg ", imageUrl);
             let alt = altFromFilename(imageUrl);
             const MAX_LEN = 120;
             if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
@@ -380,7 +336,6 @@ app.post('/generate-alt-text', async (req, res) => {
             alt = await generateAltTextWithVision(imageUrl);
         } else {
             try {
-                console.log('masuk gemini');
                 alt = await generateAltTextWithGemini(imageUrl);
             } catch (e) {
                 console.warn('Gemini failed, falling back to Vision:', e.message);
@@ -419,9 +374,7 @@ app.get('/fixes', (req, res) => {
 app.post('/save-fixes', (req, res) => {
     try{
         console.log("test save fixes");
-        // console.log("test req:", req.body);
         const { url, alts = [], meta = {} } = req.body || {};
-        // console.log("alts:", alts);
         if (!url) return res.status(400).json({ error: 'url is required' });
 
         // Merge into page cache
@@ -432,7 +385,6 @@ app.post('/save-fixes', (req, res) => {
             .map(a => ({ src: String(a.src), alt: String(a.alt) }));
         clean.forEach(a => bySrc.set(a.src, a));
         fixesCache[url] = { ts: Date.now(), alts: Array.from(bySrc.values()), meta: { ...(prev.meta||{}), ...meta } };
-        // console.log("fixesCache[url]:", fixesCache[url]);
         // promote into the global alt cache so other pages can reuse
         let touched = false;
         for (const a of clean) {
@@ -443,12 +395,10 @@ app.post('/save-fixes', (req, res) => {
                 touched = true;
             }
         }
-        // console.log("altCache:", altCache);
         
         // Persist both caches atomically-ish
         try { saveJsonAtomic(FIXES_CACHE_PATH, fixesCache); } catch(e){ console.warn('fixes cache write failed', e); }
         if (touched) { try { saveJsonAtomic(ALT_CACHE_PATH, altCache); } catch(e){ console.warn('alt cache write failed', e); } }
-        // console.log("res", res);
         
         return res.json({ ok: true, count: fixesCache[url].alts.length, ts: fixesCache[url].ts });
     } catch (e) {
@@ -524,7 +474,7 @@ app.get('/debug/fixes-cache', (req, res) => {
   }
 });
 
-app.get('/debug/alt-cache', (req, res) => {
+app.get('/debug/', (req, res) => {
   try {
     if (!fs.existsSync(ALT_CACHE_PATH)) {
       return res.json({ exists: false });

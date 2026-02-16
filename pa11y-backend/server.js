@@ -4,510 +4,360 @@ if (!process.env.K_SERVICE) {
 
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const pa11y = require('pa11y');
+const puppeteer = require('puppeteer');
+const { createClient } = require('redis'); 
 
 const vision = require('@google-cloud/vision');
 const { VertexAI } = require('@google-cloud/vertexai');
 
 const app = express();
-
-//  Cloud Run: must listen on process.env.PORT
 const port = process.env.PORT || 3000;
 
-//  Cloud Run: use temp dir (ephemeral) if you still want file cache
-const CACHE_DIR = process.env.CACHE_DIR || path.join('/tmp', 'cache');
-const ALT_CACHE_PATH = path.join(CACHE_DIR, 'alt_cache.json');
-const FIXES_CACHE_PATH = path.join(CACHE_DIR, 'fixes_cache.json');
-
-if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-
-//  JSON body
 app.use(express.json({ limit: '50mb' }));
-
-//  CORS (tighten this later)
 app.use(cors({
-  origin: true, // (dev-friendly) replace with a whitelist for prod
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-API-Key'],
+    origin: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'X-API-Key'],
 }));
 
-//  Optional API key guard (recommended once public)
+// API Key Guard
 app.use((req, res, next) => {
-  const required = process.env.EXT_API_KEY;
-  if (!required) return next(); // allow if not configured (dev)
-  const provided = req.get('x-api-key');
-  if (provided !== required) return res.status(401).json({ error: 'Unauthorized' });
-  next();
+    const required = process.env.EXT_API_KEY;
+    if (!required) return next();
+    const provided = req.get('x-api-key');
+    if (provided !== required) return res.status(401).json({ error: 'Unauthorized' });
+    next();
 });
 
-// ---- Your existing env config ----
+// ==========================================
+//  REDIS SETUP
+// ==========================================
+const redisUrl = process.env.REDIS_URL;
+const redisClient = createClient({
+    url: redisUrl,
+    socket: {
+        tls: redisUrl && redisUrl.startsWith('rediss://'),
+        rejectUnauthorized: false
+    }
+});
+
+redisClient.on('error', (err) => console.error('❌ Redis Client Error:', err));
+
+(async () => {
+    if (!redisUrl) {
+        console.warn('⚠️ REDIS_URL not set. Caching disabled.');
+        return;
+    }
+    try {
+        await redisClient.connect();
+        console.log(`✅ Connected to Redis Cloud`);
+    } catch (e) {
+        console.error('❌ Redis Connection Failed:', e.message);
+    }
+})();
+
+// ---- GCP Config ----
 const GCP_PROJECT_ID = process.env.GEMINI_PROJECT_ID || 'kemahasiswaan-itb';
 const GCP_LOCATION   = process.env.GEMINI_LOCATION   || 'us-central1';
 const GEMINI_MODEL   = process.env.GEMINI_MODEL      || 'gemini-1.5-flash';
-
 const VISION_MAX_LABELS = Number(process.env.VISION_MAX_LABELS || 5);
 const VISION_MIN_SCORE  = Number(process.env.VISION_MIN_SCORE  || 0.66);
 
-// Clients
 const visionClient = new vision.ImageAnnotatorClient();
 const vertexAI = new VertexAI({ project: GCP_PROJECT_ID, location: GCP_LOCATION });
 const generativeModel = vertexAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-// Safe load/save helpers
-function loadJson(p) {
-    try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-    catch { return {}; }
-}
-function saveJsonAtomic(p, obj) {
-    const tmp = p + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
-    fs.renameSync(tmp, p);
+// ==========================================
+//  SMART COLOR LOGIC
+// ==========================================
+
+function hexToRgb(hex) {
+    if (!hex || typeof hex !== 'string' || !/^#?[0-9A-Fa-f]{3,6}$/i.test(hex)) return { r: 0, g: 0, b: 0 };
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    return {
+        r: parseInt(hex.slice(0, 2), 16),
+        g: parseInt(hex.slice(2, 4), 16),
+        b: parseInt(hex.slice(4, 6), 16)
+    };
 }
 
-// handles .../icon.svg, .../icon.svg?ver=1#hash, and data URLs
-function isSvgUrl(u) {
-    return /^data:image\/svg\+xml[,;]/i.test(u) || /\.svg(\?|#|$)/i.test(u);
+function rgbToHex(rgb) {
+    return `#${(1 << 24 | (rgb.r << 16) | (rgb.g << 8) | rgb.b).toString(16).slice(1).toUpperCase()}`;
 }
 
-function altFromFilename(url) {
-    try {
-        // fallback for when URLs don’t have a name — return generic
-        if (/^data:/i.test(url)) return 'SVG graphic';
+function relLuminance(rgb) {
+    const toLin = (c) => {
+        c = c / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * toLin(rgb.r) + 0.7152 * toLin(rgb.g) + 0.0722 * toLin(rgb.b);
+}
 
-        const u = new URL(url);
-        let name = u.pathname.split('/').pop() || '';
-        try { name = decodeURIComponent(name); } catch {}
-        // strip extension
-        name = name.replace(/\.svg$/i, '');
-        // replace separators with spaces
-        name = name.replace(/[_\-.+]+/g, ' ');
-        // remove leftover non-alphanumerics except spaces
-        name = name.replace(/[^a-zA-Z0-9 ]+/g, ' ');
-        // collapse whitespace & trim
-        name = name.replace(/\s+/g, ' ').trim();
-        // title-case first letter only (keep acronyms)
-        if (name) name = name[0].toUpperCase() + name.slice(1);
-        return name || 'SVG graphic';
-    } catch {
-        return 'SVG graphic';
+function contrastRatio(fg, bg) {
+    const L1 = relLuminance(fg) + 0.05;
+    const L2 = relLuminance(bg) + 0.05;
+    return (Math.max(L1, L2)) / (Math.min(L1, L2));
+}
+
+function mixRgb(a, b, t) {
+    return {
+        r: Math.round(a.r + (b.r - a.r) * t),
+        g: Math.round(a.g + (b.g - a.g) * t),
+        b: Math.round(a.b + (b.b - a.b) * t)
+    };
+}
+
+function nudgeToward(fg, bg, toWhite, target) {
+    const goal = toWhite ? { r: 255, g: 255, b: 255 } : { r: 0, g: 0, b: 0 };
+    for (let i = 0; i <= 100; i++) {
+        const t = i / 100.0;
+        const mix = mixRgb(fg, goal, t);
+        if (contrastRatio(mix, bg) >= target) return { rgb: mix, t: t };
     }
+    return null;
 }
 
-// In-memory copy (loaded once, then persisted on change)
-let altCache = loadJson(ALT_CACHE_PATH);     // { [hash]: { altText, imageUrl, ts } }
-let fixesCache = loadJson(FIXES_CACHE_PATH); // { [pageUrl]: { ts, alts: [{src, alt}], meta: {...}} }
+function pickColor(bgHex, fgHex = null) {
+    const bg = hexToRgb(bgHex);
+    let fg = fgHex ? hexToRgb(fgHex) : null;
+    const black = { r: 0, g: 0, b: 0 };
+    const white = { r: 255, g: 255, b: 255 };
 
-function sha1(s) { return crypto.createHash('sha1').update(s).digest('hex'); }
+    if (!fg) {
+        const crB = contrastRatio(black, bg);
+        const crW = contrastRatio(white, bg);
+        return crB >= crW ? '#000000' : '#ffffff';
+    }
+    
+    if (contrastRatio(fg, white) >= 4.5 || contrastRatio(fg, black) >= 4.5) return rgbToHex(fg);
 
-// removes unnecessary scripts biar pa11y gak timeout2 lagi
-function sanitizeForPa11y(html, opts = {}) {
-  const {
-    removeScripts,
-    stripEventHandlers,
-    neutralizeIframes,
-    dropExternalStyles,
-    addCSP,
-    removeComments,       // NEW
-    collapseWhitespace    // NEW
-  } = opts;
+    const towardWhite = nudgeToward(fg, bg, true, 4.5);
+    const towardBlack = nudgeToward(fg, bg, false, 4.5);
 
-  let out = html;
+    if (towardWhite && towardBlack) {
+        return towardWhite.t <= towardBlack.t ? rgbToHex(towardWhite.rgb) : rgbToHex(towardBlack.rgb);
+    }
+    if (towardWhite) return rgbToHex(towardWhite.rgb);
+    if (towardBlack) return rgbToHex(towardBlack.rgb);
 
-  // --- Protect preformatted blocks so we don't collapse their whitespace ---
-  const protectedMap = new Map(); // key -> original HTML
-  let protectId = 0;
-  function protect(tag) {
-    const re = new RegExp(`<${tag}\\b[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi');
-    out = out.replace(re, (m) => {
-      const key = `__PA11Y_PROTECT_${tag.toUpperCase()}_${protectId++}__`;
-      protectedMap.set(key, m);
-      return key;
+    return contrastRatio(black, bg) > contrastRatio(white, bg) ? '#000000' : '#ffffff';
+}
+
+function extractColor(message, type) {
+    const colorRegex = {
+        foreground: /(?:change\s+(?:text|foreground)\s+(?:color|colour)\s+to\s+|set\s+(?:text|foreground)\s+color\s+to\s+)(#[a-f0-9]{6}|#[a-f0-9]{3}|[a-z]+)\b/i,
+        background: /(?:change\s+(?:background|bg)\s+to\s+)(#[a-f0-9]{6}|#[a-f0-9]{3}|[a-z]+)\b/i
+    };
+    const regex = colorRegex[type];
+    const match = message.match(regex);
+    return match ? match[1] : null;
+}
+
+// ==========================================
+//  CSS GENERATOR
+// ==========================================
+function generateCSSFromReport(issues) {
+    if (!issues || !issues.length) return '';
+
+    let css = `/* Generated A11y Fixes (Server) */\n`;
+    const issuesBySelector = {};
+    const contrastMap = {}; 
+
+    issues.forEach(issue => {
+        if (!issue.selector) return;
+        if (!issuesBySelector[issue.selector]) issuesBySelector[issue.selector] = new Set();
+        issuesBySelector[issue.selector].add(issue.code);
+
+        if (issue.code.includes("1_4_3")) {
+             const fg = extractColor(issue.message, 'foreground');
+             const bg = extractColor(issue.message, 'background');
+             if (fg || bg) contrastMap[issue.selector] = { fg, bg };
+        }
     });
-  }
-  protect('pre');
-  protect('code');
-  protect('textarea');
 
-  // Remove ALL <script>…</script> and self-closing <script …/>
-  if (removeScripts) {
-    out = out.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
-    out = out.replace(/<script\b[^>]*\/\s*>/gi, '');
-    out = out.replace(/<meta\b[^>]*http-equiv=["']?refresh["']?[^>]*>/gi, '');
-  }
+    Object.keys(issuesBySelector).forEach(selector => {
+        const codes = issuesBySelector[selector];
 
-  // Strip inline event handlers (onclick, onload, onerror, etc.)
-  if (stripEventHandlers) {
-    out = out.replace(/\son[a-z]+\s*=\s*"(?:\\.|[^"]*)"/gi, '');
-    out = out.replace(/\son[a-z]+\s*=\s*'(?:\\.|[^']*)'/gi, '');
-    out = out.replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '');
-  }
+        // 1. Fix Contrast (Smart)
+        if ([...codes].some(c => c.includes('Contrast') || c.includes('1_4_3'))) {
+            const colors = contrastMap[selector];
+            if (colors) {
+                const finalColor = pickColor(colors.bg || '#ffffff', colors.fg);
+                css += `${selector} { color: ${finalColor} !important; }\n`;
+                css += `${selector}:hover, ${selector}:focus { color: ${finalColor} !important; }\n`;
+            } else {
+                css += `${selector} { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #000000 !important; }\n`;
+            }
+        }
 
-  // Neutralize iframes (keep layout but stop network)
-  if (neutralizeIframes) {
-    out = out.replace(
-      /<iframe\b([^>]*)>([\s\S]*?)<\/iframe>/gi,
-      (_m, attrs) => {
-        const titleMatch = /title\s*=\s*(['"])(.*?)\1/i.exec(attrs);
-        const title = titleMatch ? titleMatch[2] : 'Embedded content';
-        return `<div role="group" aria-label="${escapeHtml(title)}" data-pa11y-ifr-placeholder="1"></div>`;
-      }
-    );
-  }
-
-  // Optionally drop external stylesheets (HTTP/HTTPS). Keeps inline styles.
-  if (dropExternalStyles) {
-    out = out.replace(
-      /<link\b[^>]*rel=["']?stylesheet["']?[^>]*>/gi,
-      (tag) => (/href\s*=\s*["']?(https?:)?\/\//i.test(tag) ? '' : tag)
-    );
-  }
-
-  // Remove HTML comments (not IE conditional comments)
-  if (removeComments) {
-    out = out.replace(/<!--(?!\s*\[if).*?-->/gs, '');
-  }
-
-  // Collapse “dead space”
-  if (collapseWhitespace) {
-    out = out.trim();                 // trim doc edges
-    out = out.replace(/\n{3,}/g, '\n\n');      // 3+ blank lines -> 1
-    out = out.replace(/>\s+</g, '><');        // inter-tag whitespace
-    out = out.replace(/(?:&nbsp;|\u00A0){2,}/g, ' '); // many &nbsp; -> 1 space
-    // Collapse long runs of spaces/tabs in text (attributes are unaffected)
-    out = out.replace(/[ \t\f\v]{2,}/g, ' ');
-  }
-
-  // Inject tight CSP (optional)
-  if (addCSP) {
-    out = out.replace(/<meta\b[^>]*http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
-    const csp =
-      "default-src 'self' data: blob:; " +
-      "img-src * data: blob:; " +
-      "media-src * data: blob:; " +
-      "font-src * data:; " +
-      "style-src 'self' 'unsafe-inline' data:; " +
-      "script-src 'none'; " +
-      "connect-src 'none'; " +
-      "frame-src 'none'";
-    const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
-    if (!/<head\b[^>]*>/i.test(out)) {
-      out = out.replace(/<html\b[^>]*>/i, '$&<head></head>');
-    }
-    out = out.replace(/<head\b[^>]*>/i, match => `${match}\n${cspMeta}`);
-  }
-
-  // Restore protected blocks
-  for (const [key, original] of protectedMap.entries()) {
-    out = out.replace(key, original);
-  }
-
-  return out;
+        // 2. Fix Click Targets
+        if ([...codes].some(c => c.includes('Principle2.Guideline2_4'))) {
+             css += `${selector}:focus { outline: 3px solid #E53935 !important; outline-offset: 2px !important; }\n`;
+        }
+    });
+    return css;
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
-
-function validateHttpUrl(url) {
-  try {
-    const u = new URL(url);
-    if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, error: 'Only http/https URLs are allowed' };
-    return { ok: true, url: u.toString() };
-  } catch {
-    return { ok: false, error: 'Invalid URL' };
-  }
-}
-
-async function generateAltText(imageUrl) {
-    const [result] = await visionClient.labelDetection(imageUrl);
-    const labels = result.labelAnnotations;
-    const altText = labels.map(label => label.description).join(", ");
-    return altText;
-}
+// ================= ROUTES =================
+function sha1(s) { return crypto.createHash('sha1').update(s).digest('hex'); }
+function validateHttpUrl(url) { try { const u = new URL(url); if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, error: 'Bad URL' }; return { ok: true, url: u.toString() }; } catch { return { ok: false, error: 'Invalid URL' }; } }
+function isSvgUrl(u) { return /^data:image\/svg\+xml[,;]/i.test(u) || /\.svg(\?|#|$)/i.test(u); }
+function altFromFilename(url) { try { if (/^data:/i.test(url)) return 'SVG'; const u = new URL(url); let n = u.pathname.split('/').pop() || ''; n = decodeURIComponent(n).replace(/\.svg$/i,'').replace(/[_\-.+]+/g,' ').trim(); return n || 'SVG'; } catch { return 'SVG'; } }
 
 async function generateAltTextWithVision(imageUrl) {
-    // Use imageUri so Vision downloads the URL itself
     const [result] = await visionClient.labelDetection({ image: { source: { imageUri: imageUrl } } });
-    const labels = (result.labelAnnotations || [])
-        .filter(l => (l.score || 0) >= VISION_MIN_SCORE)
-        .slice(0, VISION_MAX_LABELS)
-        .map(l => l.description);
-
-    const alt = labels.join(', ');
-    return alt || 'Image';
+    const labels = (result.labelAnnotations || []).filter(l => (l.score || 0) >= VISION_MIN_SCORE).slice(0, VISION_MAX_LABELS).map(l => l.description);
+    return labels.join(', ') || 'Image';
 }
-
-// Gemini multimodal caption (short, a11y-friendly)
 async function generateAltTextWithGemini(imageUrl) {
     const resp = await fetch(imageUrl);
-
-    if (!resp.ok) throw new Error(`Fetch image failed: ${resp.status}`);
+    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
-
-    // Guess mime (simple)
     let mimeType = 'image/jpeg';
-    const u = imageUrl.toLowerCase();
-    if (u.endsWith('.png')) mimeType = 'image/png';
-    if (u.endsWith('.webp')) mimeType = 'image/webp';
-
-    const request = {
-        contents: [{
-            role: 'user',
-            parts: [
-                { inlineData: { mimeType, data: buf.toString('base64') } },
-                { text: 'Write a concise, neutral, indonesian ALT text (<=120 chars), no branding, no speculation' }
-            ]
-        }],
-        generationConfig: { maxOutputTokens: 64, temperature: 0.2 }
-    };
-
+    if (imageUrl.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+    const request = { contents: [{ role: 'user', parts: [{ inlineData: { mimeType, data: buf.toString('base64') } }, { text: 'Concise indonesian ALT text' }] }] };
     const result = await generativeModel.generateContent(request);
-    const out = await result.response;
-    const text = out.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    // Fallback if empty
-    return text || 'Image';
+    return result.response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'Image';
 }
 
-// POST /alt-lookup  body: { srcs: ["https://...","https://..."] }
-app.post('/alt-lookup', (req, res) => {
+// 1. ALT LOOKUP
+app.post('/alt-lookup', async (req, res) => {
     const { srcs } = req.body || {};
-    if (!Array.isArray(srcs) || !srcs.length) {
-        return res.status(400).json({ error: 'srcs (array) is required' });
-    }
-    const hits = [];
-    const misses = [];
-    for (const src of srcs) {
-        const key = sha1(String(src));
-        const hit = altCache[key];
-        if (hit?.altText) {
-        hits.push({ src, alt: hit.altText });
-        } else {
-        misses.push(src);
-        }
-    }
-    return res.json({ hits, misses });
+    if (!srcs) return res.status(400).json({});
+    if (!redisClient.isOpen) return res.json({ hits: [], misses: srcs });
+    try {
+        const keys = srcs.map(s => `alt:${sha1(String(s))}`);
+        const vals = await redisClient.mGet(keys);
+        const hits = [], misses = [];
+        srcs.forEach((src, i) => { if(vals[i]) hits.push({src, alt: JSON.parse(vals[i]).altText}); else misses.push(src); });
+        return res.json({ hits, misses });
+    } catch(e) { return res.json({ hits: [], misses: srcs }); }
 });
 
+// 2. GENERATE ALT
 app.post('/generate-alt-text', async (req, res) => {
     const { imageUrl, prefer = 'gemini' } = req.body || {};
-    if (!imageUrl) return res.status(400).json({ error: 'Image URL is required' });
-
+    if (!imageUrl) return res.status(400).json({ error: 'URL required' });
+    const key = `alt:${sha1(imageUrl)}`;
     try {
-        // Cache hit first
-        const key = sha1(imageUrl);
-        const hit = altCache?.[key];
-        if (hit?.altText) {
-            return res.json({ altText: hit.altText, cached: true });
+        if (redisClient.isOpen) {
+            const c = await redisClient.get(key);
+            if (c) return res.json({ altText: JSON.parse(c).altText, cached: true });
         }
-
-        // SVG fast path (no network/AI)
         if (isSvgUrl(imageUrl)) {
-            let alt = altFromFilename(imageUrl);
-            const MAX_LEN = 120;
-            if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
-
-            // cache it but don’t fail the request if write has issues
-            try {
-                altCache[key] = { imageUrl, altText: alt, ts: Date.now() };
-                saveJsonAtomic(ALT_CACHE_PATH, altCache);
-            } catch (e) { console.warn('ALT cache write failed (SVG):', e); }
-
-            return res.json({ altText: alt, cached: false, source: 'svg-filename' });
+            const a = altFromFilename(imageUrl);
+            if (redisClient.isOpen) await redisClient.set(key, JSON.stringify({imageUrl, altText:a}));
+            return res.json({ altText: a, cached: false });
         }
-
-        // Non-SVG: AI path (Gemini → Vision fallback)
-        let alt = '';
-        if (prefer === 'vision') {
-            alt = await generateAltTextWithVision(imageUrl);
-        } else {
-            try {
-                alt = await generateAltTextWithGemini(imageUrl);
-            } catch (e) {
-                console.warn('Gemini failed, falling back to Vision:', e.message);
-                alt = await generateAltTextWithVision(imageUrl);
-            }
-        }
-
-        const MAX_LEN = 120;
-        if (alt.length > MAX_LEN) alt = alt.slice(0, MAX_LEN - 1) + '…';
-
-        try {
-            altCache[key] = { imageUrl, altText: alt, ts: Date.now() };
-            saveJsonAtomic(ALT_CACHE_PATH, altCache);
-        } catch (e) { console.warn('ALT cache write failed:', e); }
-
-        return res.json({ altText: alt, cached: false, source: 'ai' });
-
-    } catch (err) {
-        console.error('Error generating alt:', err);
-        if (!res.headersSent) return res.status(500).json({ error: 'Failed to generate alt text' });
-    }
-});
-
-// Return previously saved fixes (mainly alts) for a page
-// GET /fixes?url=http://kemahasiswaan.itb/somepage
-app.get('/fixes', (req, res) => {
-    const pageUrl = (req.query.url || '').trim();
-    if (!pageUrl) return res.status(400).json({ error: 'url is required' });
-
-    const entry = fixesCache[pageUrl];
-    res.json(entry || { ts: 0, alts: [], meta: {} });
-});
-
-// Save fixes for a page (idempotent upsert)
-// body: { url, alts: [{src, alt}, ...], meta?: {...} }
-app.post('/save-fixes', (req, res) => {
-    try{
-        console.log("test save fixes");
-        const { url, alts = [], meta = {} } = req.body || {};
-        if (!url) return res.status(400).json({ error: 'url is required' });
-
-        // Merge into page cache
-        const prev = fixesCache[url] || { alts: [], meta: {}, ts: 0 };
-        const bySrc = new Map(prev.alts.map(a => [a.src, a]));
-        const clean = alts
-            .filter(a => a && a.src && a.alt)
-            .map(a => ({ src: String(a.src), alt: String(a.alt) }));
-        clean.forEach(a => bySrc.set(a.src, a));
-        fixesCache[url] = { ts: Date.now(), alts: Array.from(bySrc.values()), meta: { ...(prev.meta||{}), ...meta } };
-        // promote into the global alt cache so other pages can reuse
-        let touched = false;
-        for (const a of clean) {
-            const key = sha1(a.src);
-            const cur = altCache[key]?.altText;
-            if (!cur || cur !== a.alt) {
-                altCache[key] = { imageUrl: a.src, altText: a.alt, ts: Date.now() };
-                touched = true;
-            }
-        }
-        
-        // Persist both caches atomically-ish
-        try { saveJsonAtomic(FIXES_CACHE_PATH, fixesCache); } catch(e){ console.warn('fixes cache write failed', e); }
-        if (touched) { try { saveJsonAtomic(ALT_CACHE_PATH, altCache); } catch(e){ console.warn('alt cache write failed', e); } }
-        
-        return res.json({ ok: true, count: fixesCache[url].alts.length, ts: fixesCache[url].ts });
+        let alt = prefer === 'vision' ? await generateAltTextWithVision(imageUrl) : await generateAltTextWithGemini(imageUrl);
+        if (redisClient.isOpen) await redisClient.set(key, JSON.stringify({imageUrl, altText:alt}));
+        return res.json({ altText: alt, cached: false });
     } catch (e) {
-        if (!res.headersSent) return res.status(500).json({ error: 'save-fixes failed' });
+        if (!res.headersSent) res.status(500).json({ error: 'Gen failed' });
     }
 });
 
-app.post('/run-pa11y', async (req, res) => {
-    const { url } = req.body || {};
-    if (!url) return res.status(400).json({ ok: false, error: 'URL is required' });
+// 3. SAVE FIXES
+app.post('/save-fixes', async (req, res) => {
+    try {
+        const { url, alts=[], meta={} } = req.body || {};
+        const key = `fixes:${sha1(url)}`;
+        let data = { alts: [], meta: {}, ts: 0 };
+        if (redisClient.isOpen) {
+            const c = await redisClient.get(key);
+            if (c) data = JSON.parse(c);
+        }
+        const map = new Map(data.alts.map(a=>[a.src,a]));
+        alts.forEach(a=>map.set(String(a.src), {src:String(a.src), alt:String(a.alt)}));
+        const newData = { ts: Date.now(), alts: Array.from(map.values()), meta: {...data.meta, ...meta} };
+        if (redisClient.isOpen) await redisClient.set(key, JSON.stringify(newData));
+        return res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: 'Save failed' }); }
+});
 
-    const v = validateHttpUrl(url);
-    if (!v.ok) return res.status(400).json({ ok: false, error: v.error });
+// 4. GENERATE CSS
+app.post('/generate-css', async (req, res) => {
+    const { report, url } = req.body || {};
+    const issues = report?.results?.issues || [];
 
-    console.log(`Received URL for scanning: ${v.url}`);
-
-    const chromeArgs = [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-zygote',
-        '--single-process',
-        '--headless=new'
-    ];
+    if (!issues.length) return res.json({ css: '', cached: false });
 
     try {
-        const results = await pa11y(v.url, {
-        standard: 'WCAG2AA',
-        timeout: 30000,
-        runners: ['htmlcs'],
+        // We generate unique hash for the content, but we also map the URL to that content.
+        
+        console.log('⚙️ Generating new CSS...');
+        const css = generateCSSFromReport(issues);
 
-        // pa11y will launch Chrome/Puppeteer internally
-        chromeLaunchConfig: {
-            args: chromeArgs,
+        if (redisClient.isOpen) {
+            // 1. Cache by Content Hash (Existing)
+            const contentKey = `css:${sha1(JSON.stringify(issues))}`;
+            await redisClient.set(contentKey, css, { EX: 604800 }); // 7 Days
 
-            // Some pa11y builds support passing executablePath here.
-            // If it ignores it, it's harmless. If it supports it, great.
-            executablePath: process.env.CHROME_PATH || '/usr/bin/chromium'
+            // 2. Cache by URL
+            if (url) {
+                const urlKey = `css-url:${sha1(url)}`;
+                await redisClient.set(urlKey, css, { EX: 604800 });
+                console.log(`🔗 Mapped URL to CSS Cache: ${url}`);
+            }
         }
+
+        return res.json({ css, cached: false });
+    } catch (e) {
+        console.error('CSS Gen Error:', e);
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// 5.5 GET CSS BY URL
+app.get('/css', async (req, res) => {
+    const { url } = req.query || {};
+    if (!url) return res.status(400).json({ error: 'URL required' });
+
+    try {
+        if (redisClient.isOpen) {
+            const key = `css-url:${sha1(url)}`;
+            const cachedCSS = await redisClient.get(key);
+            if (cachedCSS) {
+                console.log(`⚡ CSS Cache Hit for URL: ${url}`);
+                return res.json({ css: cachedCSS, cached: true });
+            }
+        }
+        return res.json({ css: null, cached: false });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// 5. RUN PA11Y
+app.post('/run-pa11y', async (req, res) => {
+    const { url, html } = req.body || {};
+    const v = validateHttpUrl(url);
+    if (!v.ok) return res.status(400).json({ ok:false, error: v.error });
+    console.log(`Scanning: ${v.url} [HTML Mode: ${!!html}]`);
+    
+    const args = ['--no-sandbox', '--disable-gpu', '--headless=new'];
+    let b = null, p = null;
+    try {
+        if (html) {
+            b = await puppeteer.launch({ args, executablePath: process.env.CHROME_PATH });
+            p = await b.newPage();
+            await p.setRequestInterception(true);
+            p.on('request', r => r.url() === v.url ? r.respond({body:html}) : r.continue());
+        }
+        const results = await pa11y(v.url, { 
+            browser: b, page: p, 
+            runners:['htmlcs'], 
+            chromeLaunchConfig:{ args, executablePath: process.env.CHROME_PATH } 
         });
-
-        // Optional: mimic pa11y-ci "level=error" (filter only errors)
-        // results.issues = (results.issues || []).filter(i => i.type === 'error');
-
+        if(b) await b.close();
         return res.json({ ok: true, url: v.url, results });
     } catch (e) {
-        console.error('pa11y error:', e);
-        return res.status(500).json({
-        ok: false,
-        error: 'Failed to run pa11y',
-        details: e.message
-        });
+        if(b) await b.close().catch(()=>{});
+        return res.status(500).json({ ok:false, error: e.message });
     }
 });
 
-// DEBUG TOOLS OPEN TO PUBLIC FOR NOW BIAR TESTING GAMPANG
-
-app.get('/debug/fixes-cache', (req, res) => {
-  try {
-    if (!fs.existsSync(FIXES_CACHE_PATH)) {
-      return res.json({ exists: false });
-    }
-
-    const data = fs.readFileSync(FIXES_CACHE_PATH, 'utf8');
-    res.json({
-      exists: true,
-      size: data.length,
-      data: JSON.parse(data)
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/debug/', (req, res) => {
-  try {
-    if (!fs.existsSync(ALT_CACHE_PATH)) {
-      return res.json({ exists: false });
-    }
-
-    const data = fs.readFileSync(ALT_CACHE_PATH, 'utf8');
-    res.json({
-      exists: true,
-      size: data.length,
-      data: JSON.parse(data)
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/debug/ls', (req, res) => {
-  try {
-    const base = '/usr/src/app';
-    const tmp = '/tmp';
-
-    res.json({
-      appDir: fs.readdirSync(base),
-      tmpDir: fs.existsSync(tmp) ? fs.readdirSync(tmp) : []
-    });
-
-    console.log('APP DIR:', fs.readdirSync('/usr/src/app'));
-    console.log('TMP DIR:', fs.readdirSync('/tmp'));
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.listen(port, () => {
-  console.log(`Pa11y backend listening on port ${port}`);
-});
+app.listen(port, () => console.log(`Listening on ${port}`));

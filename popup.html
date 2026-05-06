@@ -50,7 +50,7 @@
       .hint {
         margin-top: 4px;
         font-size: 11px;
-        color: #6b7280;
+        color: #464a52;
         line-height: 1.2;
       }
 
@@ -225,10 +225,36 @@
         from { opacity: 0; transform: translateY(-5px); }
         to { opacity: 1; transform: translateY(0); }
       }
+
+      /* --- ACCESSIBILITY: FOCUS RINGS --- */
+      :focus-visible {
+        outline: 3px solid #2563eb; /* Blue primary */
+        outline-offset: 2px;
+        border-radius: 4px; /* Sesuaikan dengan bentuk elemen */
+      }
+
+      /* Khusus untuk Tool Card, kita butuh penyesuaian sedikit agar outline tidak terpotong */
+      .tool-card:focus-visible {
+        outline: 3px solid #2563eb;
+        outline-offset: -2px; 
+      }
+      
+      /* Khusus untuk Toggle Switch */
+      .switch input:focus-visible + .slider {
+        outline: 3px solid #2563eb;
+        outline-offset: 2px;
+      }
+
+      /* --- KHUSUS RADIO BUTTON (Opsi Pemindaian URL/HTML) --- */
+      .scan-label input[type="radio"]:focus-visible {
+        outline: 3px solid #2563eb !important;
+        outline-offset: 2px !important;
+        border-radius: 50% !important;
+      }
     </style>
   </head>
   <body>
-    <h2>A11y-Ally</h2>
+    <!-- <h2>A11y-Ally</h2> -->
 
     <div class="section">
       <div class="label-group">
@@ -236,32 +262,32 @@
       </div>
       
       <div class="grid-tools">
-        <div class="tool-card" id="btnReadingMask">
+        <div class="tool-card" id="btnReadingMask" tabindex="0" role="button" aria-label="Toggle Reading Mask">
           <span class="tool-icon">📏</span>
           <span class="tool-label">Reading Mask</span>
         </div>
 
-        <div class="tool-card" id="btnStopAnim">
+        <div class="tool-card" id="btnStopAnim" tabindex="0" role="button" aria-label="Toggle Stop Animation">
           <span class="tool-icon">⏸️</span>
           <span class="tool-label">Stop Anim</span>
         </div>
 
-        <div class="tool-card" id="btnLinks">
+        <div class="tool-card" id="btnLinks" tabindex="0" role="button" aria-label="Toggle Highlight Links">
           <span class="tool-icon">🔗</span>
           <span class="tool-label">Links</span>
         </div>
         
-        <div class="tool-card" id="btnSpacing">
+        <div class="tool-card" id="btnSpacing" tabindex="0" role="button" aria-label="Toggle Text Spacing">
           <span class="tool-icon">↔️</span>
           <span class="tool-label">Spacing</span>
         </div>
 
-        <div class="tool-card" id="btnCursor">
+        <div class="tool-card" id="btnCursor" tabindex="0" role="button" aria-label="Toggle Big Cursor">
           <span class="tool-icon">👆</span>
           <span class="tool-label">Big Cursor</span>
         </div>
 
-        <div class="tool-card" id="btnTTS">
+        <div class="tool-card" id="btnTTS" tabindex="0" role="button" aria-label="Toggle Read Text">
           <span class="tool-icon">🔊</span>
           <span class="tool-label">Read Text</span>
         </div>
@@ -328,7 +354,11 @@
         <textarea id="audit-output" readonly placeholder="Waiting for scan results..."></textarea>
       </div>
       <div id="results" class="hidden"></div>
+      <button id="download-audit-btn" class="btn-primary" style="margin-top: 8px">
+      Download Audit Report
+    </button>
     </div>
+    
 
     <script src="popup.js"></script>
   </body>

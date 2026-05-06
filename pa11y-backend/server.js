@@ -181,7 +181,7 @@ function generateCSSFromReport(issues) {
     Object.keys(issuesBySelector).forEach(selector => {
         const codes = issuesBySelector[selector];
 
-        // 1. Fix Contrast (Smart)
+        // Fix Contrast
         if ([...codes].some(c => c.includes('Contrast') || c.includes('1_4_3'))) {
             const colors = contrastMap[selector];
             if (colors) {
@@ -193,7 +193,7 @@ function generateCSSFromReport(issues) {
             }
         }
 
-        // 2. Fix Click Targets
+        // Fix Click Targets
         if ([...codes].some(c => c.includes('Principle2.Guideline2_4'))) {
              css += `${selector}:focus { outline: 3px solid #E53935 !important; outline-offset: 2px !important; }\n`;
         }
@@ -207,6 +207,7 @@ function validateHttpUrl(url) { try { const u = new URL(url); if (!['http:', 'ht
 function isSvgUrl(u) { return /^data:image\/svg\+xml[,;]/i.test(u) || /\.svg(\?|#|$)/i.test(u); }
 function altFromFilename(url) { try { if (/^data:/i.test(url)) return 'SVG'; const u = new URL(url); let n = u.pathname.split('/').pop() || ''; n = decodeURIComponent(n).replace(/\.svg$/i,'').replace(/[_\-.+]+/g,' ').trim(); return n || 'SVG'; } catch { return 'SVG'; } }
 
+// deprecated not rlly used anymore
 async function generateAltTextWithVision(imageUrl) {
     const [result] = await visionClient.labelDetection({ image: { source: { imageUri: imageUrl } } });
     const labels = (result.labelAnnotations || []).filter(l => (l.score || 0) >= VISION_MIN_SCORE).slice(0, VISION_MAX_LABELS).map(l => l.description);
@@ -252,6 +253,22 @@ app.post('/generate-alt-text', async (req, res) => {
             if (redisClient.isOpen) await redisClient.set(key, JSON.stringify({imageUrl, altText:a}));
             return res.json({ altText: a, cached: false });
         }
+        try {
+            const check = await fetch(imageUrl, { method: 'HEAD' });
+            if (!check.ok) {
+                console.warn(`[A11y-Ally] Image unreachable (${check.status}): ${imageUrl}. Initiating filename fallback.`);
+                const fallbackAlt = "Image error 404 Not Found";
+                
+                if (redisClient.isOpen) await redisClient.set(key, JSON.stringify({imageUrl, altText: fallbackAlt}));
+                return res.json({ altText: fallbackAlt, cached: false, fallback: true });
+            }
+        } catch (networkErr) {
+            // Catches DNS resolution failures or timeouts
+            console.warn(`[A11y-Ally] Network error reaching ${imageUrl}. Initiating filename fallback.`);
+            const fallbackAlt = altFromFilename(imageUrl);
+            return res.json({ altText: fallbackAlt, cached: false, fallback: true });
+        }
+        
         let alt = prefer === 'vision' ? await generateAltTextWithVision(imageUrl) : await generateAltTextWithGemini(imageUrl);
         if (redisClient.isOpen) await redisClient.set(key, JSON.stringify({imageUrl, altText:alt}));
         return res.json({ altText: alt, cached: false });
@@ -286,9 +303,6 @@ app.post('/generate-css', async (req, res) => {
     if (!issues.length) return res.json({ css: '', cached: false });
 
     try {
-        // We generate unique hash for the content, but we also map the URL to that content.
-        
-        console.log('⚙️ Generating new CSS...');
         const css = generateCSSFromReport(issues);
 
         if (redisClient.isOpen) {
@@ -334,8 +348,9 @@ app.get('/css', async (req, res) => {
 // 5. RUN PA11Y
 app.post('/run-pa11y', async (req, res) => {
     const { url, html } = req.body || {};
+
     const v = validateHttpUrl(url);
-    if (!v.ok) return res.status(400).json({ ok:false, error: v.error });
+    if (!v.ok) return res.status(400).json({ ok: false, error: v.error });
     console.log(`Scanning: ${v.url} [HTML Mode: ${!!html}]`);
     
     const args = ['--no-sandbox', '--disable-gpu', '--headless=new'];
@@ -344,19 +359,36 @@ app.post('/run-pa11y', async (req, res) => {
         if (html) {
             b = await puppeteer.launch({ args, executablePath: process.env.CHROME_PATH });
             p = await b.newPage();
+            
+            // Scrub inline scripts from the HTML string so they can't fire
+            const safeHtml = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+            
             await p.setRequestInterception(true);
-            p.on('request', r => r.url() === v.url ? r.respond({body:html}) : r.continue());
+            p.on('request', r => {
+                if (r.url() === v.url) {
+                    // Serve our scrubbed HTML
+                    r.respond({ body: safeHtml });
+                } else if (r.resourceType() === 'script') {
+                    // Abort any external script files to save bandwidth and prevent re-renders
+                    r.abort();
+                } else {
+                    r.continue();
+                }
+            });
         }
+        
         const results = await pa11y(v.url, { 
-            browser: b, page: p, 
-            runners:['htmlcs'], 
-            chromeLaunchConfig:{ args, executablePath: process.env.CHROME_PATH } 
+            browser: b, 
+            page: p, 
+            runners: ['htmlcs'], 
+            chromeLaunchConfig: { args, executablePath: process.env.CHROME_PATH } 
         });
+        
         if(b) await b.close();
         return res.json({ ok: true, url: v.url, results });
     } catch (e) {
         if(b) await b.close().catch(()=>{});
-        return res.status(500).json({ ok:false, error: e.message });
+        return res.status(500).json({ ok: false, error: e.message });
     }
 });
 

@@ -8,6 +8,8 @@ const BACKEND_URL = 'https://pa11y-backend-tisgwzdora-et.a.run.app';
 async function isAutoFixEnabled() {
   return new Promise((resolve) => {
     chrome.storage.sync.get({ autoFixEnabled: false }, ({ autoFixEnabled }) => {
+    console.log(` Check AutoFix state:`, autoFixEnabled ? "ACTIVE" : "NONACTIVE");
+
       resolve(autoFixEnabled);
     });
   });
@@ -83,11 +85,7 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
 }
 
 // ============================================================================
-// 3. MAIN LOGIC (THE ORCHESTRATOR)
-// ============================================================================
-
-// ============================================================================
-// 3. MAIN LOGIC (UPDATED WITH CACHE FIRST)
+// 3. MAIN LOGIC
 // ============================================================================
 
 async function runManualFixes() {
@@ -95,31 +93,33 @@ async function runManualFixes() {
     "runGeneralFixes": false,
     // "generateAltForImages": false,
     "savePageFixes": false,
-    "cssCacheHit": false, // NEW TRACKER
-    "pa11yResult": false,
+    "cssCacheHit": false,
+    // "pa11yResult": false,
     "GENERATE_A11Y_CSS": false,
+    "timeTaken": "0 ms" //
   };
+
+  const startTime = performance.now(); // <-- TRACKER LATENCY
 
   await (async () => {
     try {
       // 1. URL validation
       const url = window.location.href;
       if (/^(chrome|edge|about|chrome-extension|file):\/\//i.test(url)) return;
-      console.log('🔍 Scanning URL:', url);
+      console.log('Scanning URL:', url);
 
-      // --- STEP 0: CHECK CSS CACHE FIRST (The Fast Lane) ---
+      // CHECK CSS CACHE FIRST ---
       const cachedCSS = await checkCssCache(url);
       if (cachedCSS) {
-          console.log("⚡ FAST LANE: Cache Hit! Skipping Pa11y Scan.");
+          console.log("FAST LANE: Cache Hit! Skipping Pa11y Scan.");
           injectCSS(cachedCSS);
           successfulRuns.cssCacheHit = true;
           successfulRuns.GENERATE_A11Y_CSS = true;
           
-          // Even if we skip Pa11y, we usually still run local General Fixes 
-          // because they are instant and handle dynamic elements (dropdowns, etc)
-          await runGeneralFixes();
-          successfulRuns.runGeneralFixes = true;
-          return; // <--- EXIT HERE! Scan skipped.
+          const checkRGF = await runGeneralFixes();
+          // console.log(checkRGF);
+          if (checkRGF.ok) successfulRuns.runGeneralFixes = true;
+          return; 
       }
 
       // -----------------------------------------------------
@@ -137,22 +137,27 @@ async function runManualFixes() {
         } catch (e) {}
       }
 
-      // 4. RUN PA11Y (The Slow Part)
-      console.log("🐢 Cache Miss. Running full scan...");
+      // 4. RUN PA11Y
+      console.log("Cache Miss. Running full scan...");
       const pa11yResult = await runPromisify('RUN_PA11Y', { url: url });
       const pa11yReport = pa11yResult.data;
       successfulRuns.pa11yResult = pa11yResult.ok;
 
       if (!pa11yResult.ok) throw new Error(`Pa11y Failed`);
 
-      // 5. GENERATE & INJECT CSS (And Cache it for next time)
+      // 5. GENERATE & INJECT CSS & CACHE
       const cssInjected = await generateAndInjectCSS(pa11yReport, url);
       successfulRuns.GENERATE_A11Y_CSS = cssInjected;
 
     } catch (e) {
-      console.error('❌ runManualFixes failed:', e);
+      console.error('runManualFixes failed:', e);
     } finally {
+      const endTime = performance.now();
+      const duration = (endTime - startTime).toFixed(2); // buletin doang
+      successfulRuns.timeTaken = `${duration} ms`; 
+      
       console.table(successfulRuns);
+      console.log(`Eksekusi Selesai dalam: ${duration} ms`);
     }
   })();
 
@@ -162,7 +167,6 @@ async function runManualFixes() {
 // --- HELPER: CHECK CACHE ---
 async function checkCssCache(url) {
     try {
-        // We use GET request for lookup
         const resp = await fetch(`${BACKEND_URL}/css?url=${encodeURIComponent(url)}`);
         if (!resp.ok) return null;
         const data = await resp.json();
@@ -182,10 +186,10 @@ function injectCSS(cssContent) {
         document.head.appendChild(style);
     }
     style.textContent = cssContent;
-    console.log('🎨 CSS Injected.');
+    console.log('CSS Injected.');
 }
 
-// --- UPDATED GENERATOR (Sends URL to save cache) ---
+// --- UPDATED GENERATOR SEND URL---
 async function generateAndInjectCSS(report, url) {
     try {
         const response = await fetch(`${BACKEND_URL}/generate-css`, {
@@ -193,7 +197,7 @@ async function generateAndInjectCSS(report, url) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 report: report,
-                url: url // <--- Send URL so server can map it!
+                url: url // <--- Send URL FOR CACHE
             })
         });
 
@@ -208,11 +212,6 @@ async function generateAndInjectCSS(report, url) {
         return false;
     }
 }
-
-// ============================================================================
-// 4. CSS GENERATION (SERVER-SIDE)
-// ============================================================================
-
 
 
 // ============================================================================
@@ -351,21 +350,52 @@ function toggleBigCursor(enable) {
 
 // --- Text-to-Speech (TTS) ---
 let ttsEnabled = false;
+
+function speak(text) {
+    // stop suara sebelumnya biar gak tumpang tindih
+    window.speechSynthesis.cancel(); 
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'id-ID'; // setting bahasa
+    utterance.rate = 1.0;     // playback speed
+    window.speechSynthesis.speak(utterance);
+}
+
+// Handle teks pas diseleksi 
 function handleMouseUpTTS() {
   if (!ttsEnabled) return;
+  
   const selectedText = window.getSelection().toString().trim();
   if (selectedText.length > 0) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(selectedText);
-    utterance.lang = 'id-ID'; 
-    window.speechSynthesis.speak(utterance);
+    speak(selectedText);
   }
 }
+
+// Handle Gambar
+function handleImageHoverTTS(e) {
+  if (!ttsEnabled) return;
+
+  // Cek apakah elemen di kursor teh GAMBAR
+  if (e.target.tagName === 'IMG') {
+    const alt = e.target.getAttribute('alt');
+    
+    if (alt && alt.trim().length > 0) {
+      speak(`Gambar: ${alt}`);
+    } else {
+      // speak("Gambar tanpa deskripsi"); 
+    }
+  }
+}
+
 function toggleTTS(enable) {
   ttsEnabled = enable;
-  if (enable) document.addEventListener('mouseup', handleMouseUpTTS);
-  else {
+  
+  if (enable) {
+    document.addEventListener('mouseup', handleMouseUpTTS);
+    document.addEventListener('mouseover', handleImageHoverTTS); 
+  } else {
     document.removeEventListener('mouseup', handleMouseUpTTS);
+    document.removeEventListener('mouseover', handleImageHoverTTS); 
     window.speechSynthesis.cancel(); 
   }
 }
@@ -388,6 +418,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "GET_HTML") {
     try {
       const currentHtml = document.documentElement.outerHTML;
+      // console.log('currentHTML', currentHtml);
       sendResponse({ ok: true, html: currentHtml });
     } catch (e) {
       sendResponse({ ok: false, error: String(e?.message || e) });
@@ -624,6 +655,7 @@ async function runGeneralFixes() {
 
   // Generate Alt
   const applied = await generateAltForImages(); 
+  console.log(applied);
   return applied;
 }
 
@@ -633,64 +665,114 @@ async function runGeneralFixes() {
 
 async function generateAltForImages({ prefer = 'gemini', concurrency = 5, requestTimeoutMs = 15000 } = {}) {
   const imgs = [...document.querySelectorAll('img')].filter((img) => !img.getAttribute('alt')?.trim());
+
+  // console.log ('imgs', imgs);
   if (!imgs.length) return { applied: [], ok: true };
 
-  const uniqueSrcs = [...new Set(imgs.map((i) => i.src).filter(Boolean))];
-  let hits = [], misses = uniqueSrcs, ok = true, applied = [];
+  let ok = true;
+  let applied = [];
 
-  // 1. Check Cache
+  // Peta-in URL bersih ke elemen gambar asli
+  const imgMap = new Map();
+  for (const img of imgs) {
+    let rawUrl = img.src || '';
+    let cleanUrl = rawUrl.trim(); // Hapus spasi nyasar di akhir src="..."
+    
+    try {
+      const u = new URL(cleanUrl);
+      // 1. Pecah path URL berdasarkan garis miring '/'
+      // 2. Decode semua elemen trus Encode ulang pakai encodeURIComponent
+      // Ngubah <br> jadi %3Cbr%3E tanpa menghilangkan eksistensinya
+      const pathSegments = decodeURIComponent(u.pathname).split('/');
+      u.pathname = pathSegments.map(encodeURIComponent).join('/');
+      
+      cleanUrl = u.toString();
+    } catch (e) {
+      // Fallback
+      cleanUrl = encodeURI(rawUrl.trim());
+    }
+
+    if (!imgMap.has(cleanUrl)) imgMap.set(cleanUrl, []);
+    imgMap.get(cleanUrl).push(img);
+  }
+
+  // Gunakan URL yang udah clean untuk mencari di Cache
+  const uniqueCleanSrcs = Array.from(imgMap.keys()).filter(Boolean);
+  let hits = [], misses = uniqueCleanSrcs;
+
+  console.log('uniqueCleanSrcs', uniqueCleanSrcs);
+  console.log('imgMap', imgMap);
+
+  // 1. Check Cache (Redis)
   try {
-    const alt_lookup = await runPromisify('ALT_LOOKUP', {srcs: uniqueSrcs});
+    const alt_lookup = await runPromisify('ALT_LOOKUP', { srcs: uniqueCleanSrcs });
     hits = alt_lookup?.data?.hits || [];
-    misses = alt_lookup?.data?.misses || uniqueSrcs;
+    misses = alt_lookup?.data?.misses || uniqueCleanSrcs;
   } catch (err) {
     ok = false;
   }
 
+  // Terapin Cache Hits ke elemen DOM yang tepat
   const hitMap = new Map(hits.map((h) => [h.src, h.alt]));
-  for (const img of imgs) {
-    const a = hitMap.get(img.src);
+  for (const [cleanUrl, imgElements] of imgMap.entries()) {
+    const a = hitMap.get(cleanUrl);
     if (a) {
-      img.setAttribute('alt', a);
-      applied.push({ src: img.src, alt: a });
+      for (const img of imgElements) {
+        img.setAttribute('alt', a);
+        img.setAttribute('title', a);
+        applied.push({ src: img.src, alt: a });  // Simpan src asli (rawUrl) untuk dibalikin ke server pas save-fixes
+      }
     }
   }
 
-  // 2. Generate for remaining
-  const remainingImgs = imgs.filter((i) => !i.getAttribute('alt')?.trim());
-  const svgImgs = remainingImgs.filter((i) => isSvgSrc(i.src));
-  const nonSvgImgs = remainingImgs.filter((i) => !isSvgSrc(i.src));
+  // 2. Generate for remaining (Misses)
+  const svgUrls = misses.filter((url) => isSvgSrc(url));
+  const nonSvgUrls = misses.filter((url) => !isSvgSrc(url));
 
-  // SVGs (Local)
-  for (const img of svgImgs) {
+  // SVGs 
+  for (const url of svgUrls) {
     try {
-      const alt = filenameAlt(img.src);
+      const alt = filenameAlt(url);
       if (alt?.trim()) {
-        img.setAttribute('alt', alt);
-        applied.push({ src: img.src, alt });
+        const imgElements = imgMap.get(url) || [];
+        for (const img of imgElements) {
+          img.setAttribute('alt', alt);
+          img.setAttribute('title', alt);
+          applied.push({ src: img.src, alt });
+        }
       } else { ok = false; }
     } catch (err) { ok = false; }
   }
 
-  // Others (Server)
+  // Non-SVGs (Lempar ke Server Cloud Run - Gemini AI)
   let idx = 0;
   async function worker() {
-    while (idx < nonSvgImgs.length) {
-      const img = nonSvgImgs[idx++];
-      const src = img.src;
+    while (idx < nonSvgUrls.length) {
+      const cleanUrl = nonSvgUrls[idx++];
+      console.log('clean', cleanUrl);
       try {
-        const resp = await runPromisify('GEN_ALT', { src, requestTimeoutMs, prefer });
+        const resp = await runPromisify('GEN_ALT', { src: cleanUrl, requestTimeoutMs, prefer });
         const altText = resp?.data?.altText;
+        
         if (altText?.trim()) {
-          img.setAttribute('alt', altText);
-          applied.push({ src, alt: altText });
+          const imgElements = imgMap.get(cleanUrl) || [];
+          for (const img of imgElements) {
+            img.setAttribute('alt', altText);
+            img.setAttribute('title', altText);
+            applied.push({ src: img.src, alt: altText });
+          }
         } else { ok = false; }
-      } catch (err) { ok = false; }
+      } catch (err) { 
+        console.warn(`Gen alt terhenti untuk ${cleanUrl}:`, err.message);
+        ok = false; 
+      }
     }
   }
 
-  const workerCount = Math.max(1, Math.min(concurrency, nonSvgImgs.length));
+  const workerCount = Math.max(1, Math.min(concurrency, nonSvgUrls.length));
   await Promise.all(Array.from({ length: workerCount }, worker));
+
+  // console.log('applied', applied);
 
   return { applied, ok };
 }

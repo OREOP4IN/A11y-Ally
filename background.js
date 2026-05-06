@@ -62,8 +62,53 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     // 5. ENV CHECK
     if (msg.type === 'ENV_MODE') {
-        // Optional endpoint, if you have it
         sendResponse({ ok: true, data: 'production' });
         return true;
+    }
+});
+
+// ============================================================================
+// KEYBOARD SHORTCUTS LISTENER
+// ============================================================================
+
+chrome.commands.onCommand.addListener((command) => {
+    const commandMap = {
+        "toggle-auto-fix": { key: "autoFixEnabled", type: "RELOAD_TAB" },
+        "toggle-dyslexia": { key: "dyslexiaFontEnabled", type: "TOGGLE_DYSLEXIA_FONT" },
+        "toggle-reading-mask": { key: "readingMaskEnabled", type: "TOGGLE_READING_MASK" },
+        "toggle-stop-anim": { key: "stopAnimationEnabled", type: "TOGGLE_STOP_ANIMATION" },
+        "toggle-links": { key: "highlightLinksEnabled", type: "TOGGLE_HIGHLIGHT_LINKS" },
+        "toggle-spacing": { key: "textSpacingEnabled", type: "TOGGLE_TEXT_SPACING" },
+        "toggle-cursor": { key: "bigCursorEnabled", type: "TOGGLE_BIG_CURSOR" },
+        "toggle-tts": { key: "ttsEnabled", type: "TOGGLE_TTS" }
+    };
+
+    if (commandMap[command]) {
+        const { key, type } = commandMap[command];
+        
+        // 1. Ambil status saat ini dari chrome.storage.sync biar sinkron antar device
+        chrome.storage.sync.get({ [key]: false }, (res) => {
+            const newState = !res[key];
+            
+            // 2. Simpan status baru
+            chrome.storage.sync.set({ [key]: newState }, () => {
+                
+                // 3. Kirim perintah ke tab yang sedang aktif
+                chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                    if (tabs[0]?.id) {
+                        // Khusus Auto Fix, reload tab agar script berjalan ulang dari awal
+                        if (type === "RELOAD_TAB") {
+                            chrome.tabs.reload(tabs[0].id);
+                        } else {
+                            // Untuk Visual Aids, kirim pesan langsung agar berubah tanpa reload
+                            chrome.tabs.sendMessage(tabs[0].id, { 
+                                type: type, 
+                                enabled: newState 
+                            }).catch(() => console.log("Content script belum siap/berjalan di halaman ini."));
+                        }
+                    }
+                });
+            });
+        });
     }
 });

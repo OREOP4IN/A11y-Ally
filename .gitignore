@@ -1,2 +1,4 @@
-pa11y-backend/node_modules
+*/node_modules/
+*/debug-junk/
 .env
+node_modules
